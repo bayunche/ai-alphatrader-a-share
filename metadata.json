@@ -1,0 +1,5 @@
+{
+  "name": "AI AlphaTrader A-Share",
+  "description": "An automated AI trading system simulation for A-Share markets using Gemini 2.5 Flash. Features real-time strategy execution, sandbox backtesting, and comprehensive performance analytics.",
+  "requestFramePermissions": []
+}

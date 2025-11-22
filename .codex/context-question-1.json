@@ -1,0 +1,12 @@
+{
+  "question": "为什么 vite.config.ts 使用 defineConfig(async () => ...) 会触发 TS2769，提示 Promise<{...}> 与 UserConfig 不兼容？",
+  "why_this_matters": "需要明确修复方向是去掉 async 还是调整签名/类型，否则构建无法继续。",
+  "finding": {
+    "evidence": [
+      "node_modules/vite/dist/node/index.d.ts:3209 定义 UserConfigExport = UserConfig | Promise<UserConfig> | UserConfigFnObject | UserConfigFnPromise | UserConfigFn;",
+      "defineConfig 重载最后一个参数类型为 UserConfigExport（同上），其中异步函数需要签名 (env: ConfigEnv) => Promise<UserConfig>。",
+      "当前配置 defineConfig(async () => ({ ... })) 返回 Promise<UserConfig> 但未声明 env 参数，TS 推断为 () => Promise<{...}>，与 UserConfigFnPromise 不匹配导致报错。"
+    ],
+    "conclusion": "无需异步逻辑，直接使用同步 defineConfig({ ... }) 或按签名添加 env 参数；建议改为同步对象导出以消除类型报错。"
+  }
+}

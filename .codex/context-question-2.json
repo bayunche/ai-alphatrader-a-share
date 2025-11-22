@@ -1,0 +1,10 @@
+{
+  "question": "如何满足 tauri.bundle.icon 对图标文件的要求以解除构建阻塞？",
+  "priority": "high",
+  "reason": "tauri-build 明确要求 icons/icon.ico 等资源，否则 Windows 资源文件生成失败，构建中断。",
+  "evidence": [
+    "src-tauri/tauri.conf.json 中 bundle.icon 指向 icons/32x32.png、icons/128x128.png、icons/128x128@2x.png、icons/icon.icns、icons/icon.ico",
+    "`yarn tauri build` 报错 `icons/icon.ico not found`，同时仓库缺少任何 *.png/*.ico 文件"
+  ],
+  "direction": "生成一张基底 PNG（>=512x512），使用 `yarn tauri icon` 生成多规格 icons 目录，或手动提供对应文件后重新构建"
+}

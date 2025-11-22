@@ -1,0 +1,6 @@
+{
+  "interface_clarity": "是：Tauri 打包依赖 src-tauri/tauri.conf.json 的 bundle.icon 列表；脚本 `yarn tauri` 触发 tauri-build，`npm run build` 先跑前端。",
+  "tech_choice_rationale": "沿用 Tauri 官方图标生成流程，避免自研组件；保持 Vite + React + Rust tauri-build 既有栈。",
+  "risks": "暂无自动化测试；缺少图标会阻断构建；若生成工具或依赖缺失可能仍需额外安装。行情页仍缺完整证券主表，当前仅靠东方财富榜单。",
+  "verification_strategy": "生成 icons 后执行 `yarn tauri icon <png>`（生成资源）再跑 `yarn tauri build`；记录结果到 .codex/testing.md 与 verification.md。行情搜索逻辑需在 UI 上验证过滤和数据覆盖度。"
+}
