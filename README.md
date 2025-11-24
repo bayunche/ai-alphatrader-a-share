@@ -5,8 +5,9 @@
 ## 核心特性
 - 多智能体交易面板：监控行情、执行策略、查看交易日志与资金曲线。
 - 数据与服务分层：前端在 `services/` 统一封装行情、Gemini 推理、通知、持久化调用。
+- 行情采集：`server/eastmoney.py` 提供东财 push2/push2his 全量主表、实时行情、日线 K 线抓取，落地 SQLite（`a_stock_master` / `a_stock_kline_daily`），支持仅刷新价格。
 - 可选后端：`server/` 提供 Express + sqlite3 API 与 schema；无后端时前端也可独立运行。
-- 桌面发行：`src-tauri/` 集成 Tauri，可打包为桌面应用。
+- 桌面发行：`src-tauri/` 集成 Tauri，可打包为桌面应用，sidecar 启动后端并共用数据库。
 
 ## 项目结构
 ```
@@ -20,27 +21,31 @@ types.ts                # 共享类型定义
 ```
 
 ## 环境与配置
-- Node.js 18+（建议），Rust toolchain（用于 Tauri），sqlite3 由 npm 自动安装。
+- Node.js 18+（建议），Rust toolchain（用于 Tauri），sqlite3 由 npm 自动安装；Python 3.10+（运行东财抓取脚本），需自行安装 `pandas`、`requests`。
 - 在根目录创建 `.env.local`，示例：
 ```bash
 GEMINI_API_KEY=your_key_here
+VITE_API_BASE=http://127.0.0.1:3001/api   # 可选，前端调用的后端基址
+VITE_FORCE_BACKEND=true                   # 可选，默认打包版强制走后端；设为 false 时允许前端直连东财
 ```
 
 ## 开发与运行
 1. 安装依赖：`npm install`
-2. 前端开发：`npm run dev`（Vite，默认监听 5173）
+2. 前端开发：`npm run dev`（Vite，默认 5173）
 3. 后端启动（可选）：`cd server && npm install && npm start`（默认 3001）
 4. 预览打包产物：`npm run preview`
-5. （可选）自定义后端地址：在 `.env.local` 设置 `VITE_API_BASE=http://127.0.0.1:3001/api` 以覆盖默认接口基址。
+5. 行情抓取（可选）：安装 Python 依赖后运行 `python3 server/eastmoney.py`，会初始化 `stock.db`（或 `DB_PATH` 指定路径）、全量拉取主表、交易时段刷新价格、写入日线示例。
+6. （可选）自定义后端地址：在 `.env.local` 设置 `VITE_API_BASE=http://127.0.0.1:3001/api`，打包版默认使用 sidecar 提供的 3001。
 
 ## 构建与打包
-- Web 构建：`npm run build`（先运行 TypeScript 检查，再产出 `dist/`）
-- 后端打包（Tauri sidecar）：`yarn build:server`，基于 `pkg` 将 `server/index.js` 打成 `src-tauri/bin/server.exe`，并内置 `schema.sql`，数据库文件落在 Tauri 的 app 数据目录（通过 `DATA_DIR` 环境变量）。
-- 桌面打包：`yarn build:desktop`（等价于 `yarn build:server && yarn tauri build`，需要 Rust；产物位于 `src-tauri/target`）
-- 部署建议：将 `dist/` 交由任意静态资源服务器（如 Nginx）；后端服务独立部署，确保前端调用的 API 基址已在服务封装中配置或由环境变量提供。
+- Web 构建：`npm run build`（先 TypeScript 检查，再产出 `dist/`）
+- 后端打包（Tauri sidecar）：`yarn build:server`，基于 `pkg` 将 `server/index.js` 打成 `src-tauri/bin/server.exe`，并内置 `schema.sql`，数据库文件落在 Tauri 的 app 数据目录（`DATA_DIR`）。
+- 桌面打包：`yarn build:desktop`（等价于 `yarn build:server && yarn tauri build`，需 Rust）；如遇图标/平台依赖错误，请确保 `assets/desktop_icon_rgba.png` 与 `assets/tray_icon_rgba.png` 存在且为 RGBA，并安装匹配平台的 Tauri CLI/openssl。
+- 部署建议：将 `dist/` 交由任意静态资源服务器（如 Nginx）；后端服务独立部署，确保前端调用的 API 基址已通过配置或环境变量提供。
 
 ## 测试
-当前仓库暂无自动化测试，新增功能时建议引入 Vitest + React Testing Library；用例命名 `*.test.ts(x)`。
+- 前端：暂无自动化测试，建议引入 Vitest + React Testing Library；用例命名 `*.test.ts(x)`。
+- 后端行情脚本：`server/test_eastmoney.py` 使用 mock 覆盖东财解析与 SQLite 入库；运行前需安装 pandas/requests。
 
 ## 贡献指引
 - 提交信息建议遵循 Conventional Commits，例如 `feat: 增加止损保护`、`fix: 去重重复通知`。
