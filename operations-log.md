@@ -108,3 +108,17 @@
 
 ## 2025-11-24T02:00:00+08:00
 - 更新 README：补充东财抓取脚本 `server/eastmoney.py` 的使用说明、Python 依赖、VITE_FORCE_BACKEND 配置、打包版图标/依赖提示，以及后端单元测试入口，确保打包/运行流程一目了然。
+
+## 2025-11-24T02:15:00+08:00
+- 为打包版统一图标：将 `assets/desktop_icon_rgba.png` 覆盖到 `src-tauri/app-icon.png`，`tauri.conf.json` 的 bundle icon 指向该文件，资源仍保留 assets 中的 RGBA 图标。
+- 任务栏/关闭行为：在 `src-tauri/src/main.rs` 添加系统托盘菜单（显示/退出），拦截窗口关闭事件改为隐藏窗口，支持点击托盘图标或菜单恢复，Quit 菜单退出并杀掉 sidecar。
+
+## 2025-11-24T02:25:00+08:00
+- 修复 Tauri 打包缺少 .ico 导致 panic：`tauri.conf.json` 的 bundle.icon 增加 `icons/icon.ico`（同时保留 app-icon.png），满足 Windows 打包对 .ico 的要求。
+
+## 2025-11-24T02:35:00+08:00
+- 后端：新增 `POST /api/market/refresh`，调用 `refreshMarketCache`，便于前端手动触发东财主表抓取。
+- 前端行情页：在市场页顶部增加“强制后端抓取”按钮，调用 `triggerBackendRefresh`，并记录日志/提示。
+
+## 2025-11-24T02:45:00+08:00
+- 托盘退出修复：托盘菜单点击“退出”时先调用 state.kill 关闭 sidecar，再退出应用，避免隐藏到托盘后退出未杀掉 Node 进程的问题。

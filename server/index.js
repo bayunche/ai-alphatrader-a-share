@@ -267,6 +267,16 @@ app.get('/api/market', async (req, res) => {
   res.json({ success: true, data: paged, total, lastUpdated: marketCache.lastUpdated });
 });
 
+// 强制刷新东财主表缓存，便于前端手动触发抓取
+app.post('/api/market/refresh', async (_req, res) => {
+  try {
+    await refreshMarketCache();
+    res.json({ success: true, total: marketCache.total, lastUpdated: marketCache.lastUpdated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });

@@ -5,7 +5,7 @@ import {
   MarketData, TradeExecution, LogEntry, 
   TradeAction, BrokerConfig, TradingAgent, StockPool, NotificationConfig, PortfolioState
 } from './types';
-import { fetchMarketData, resetMarketService, updateSpecificStocks } from './services/marketService';
+import { fetchMarketData, resetMarketService, triggerBackendRefresh, updateSpecificStocks } from './services/marketService';
 import { analyzeMarket } from './services/geminiService';
 import { dataApi } from './services/api'; 
 import { sendNotification } from './services/notificationService';
@@ -73,6 +73,7 @@ function App() {
   const [marketData, setMarketData] = useState<MarketData[]>([]);
   const [marketSearch, setMarketSearch] = useState('');
   const [marketPage, setMarketPage] = useState(1);
+  const [marketRefreshLoading, setMarketRefreshLoading] = useState(false);
   const pageSize = 50;
   const [tradeHistory, setTradeHistory] = useState<TradeExecution[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -829,6 +830,25 @@ function App() {
                                         onChange={(e) => { setMarketPage(1); setMarketSearch(e.target.value); }}
                                      />
                                  </div>
+                                 <button
+                                    onClick={async () => {
+                                        try {
+                                            setMarketRefreshLoading(true);
+                                            const resp = await triggerBackendRefresh();
+                                            addLog('SYSTEM', `已强制后端抓取行情，total=${resp.total || 0}`);
+                                            alert('已触发后端抓取');
+                                        } catch (e: any) {
+                                            console.error(e);
+                                            alert('后端抓取失败，请检查服务');
+                                        } finally {
+                                            setMarketRefreshLoading(false);
+                                        }
+                                    }}
+                                    disabled={marketRefreshLoading}
+                                    className="px-3 py-1.5 rounded-full border border-white/10 text-xs text-white hover:bg-white/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                 >
+                                    {marketRefreshLoading ? '抓取中...' : '强制后端抓取'}
+                                 </button>
                                  <div className="flex items-center gap-2 text-xs text-neutral-400">
                                     <button 
                                         disabled={marketPage <= 1}

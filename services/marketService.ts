@@ -58,6 +58,14 @@ type MarketResponse = {
     total?: number;
 };
 
+export const triggerBackendRefresh = async (): Promise<{ success: boolean; total?: number; lastUpdated?: number }> => {
+    const url = `${API_BASE}/market/refresh`;
+    console.info("[market] trigger backend refresh", { url });
+    const res = await fetch(url, { method: 'POST' });
+    if (!res.ok) throw new Error('后端刷新失败');
+    return res.json();
+};
+
 const fetchBackendMarketData = async (page: number, pageSize: number, keyword: string): Promise<MarketResponse | null> => {
     try {
         const url = new URL(`${API_BASE}/market`);

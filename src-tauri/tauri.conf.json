@@ -55,7 +55,8 @@
         "bin/server"
       ],
       "icon": [
-        "../assets/desktop_icon_rgba.png"
+        "icons/icon.ico",
+        "app-icon.png"
       ],
       "resources": [
         "../assets/desktop_icon_rgba.png",
