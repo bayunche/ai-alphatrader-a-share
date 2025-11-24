@@ -1,54 +1,40 @@
 {
   "location": {
-    "module": "src-tauri/tauri.conf.json",
+    "module": "server/index.js",
     "related": [
-      "src-tauri/build.rs",
-      "src-tauri/Cargo.toml",
-      "src-tauri/src/main.rs"
+      "server/schema.sql",
+      "package.json",
+      "src-tauri/tauri.conf.json"
     ],
-    "context": "Tauri 桌面打包配置，yarn tauri build 期间由 tauri-build 读取生成资源"
+    "context": "后端 Express + sqlite3，用作 Tauri sidecar；当前只包含用户/工作区表和行情缓存接口"
   },
   "current_state": {
-    "bundle": {
-      "icon_list": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
-      ],
-      "icons_dir": "src-tauri/icons（当前不存在）"
+    "db": {
+      "path": "dataDir/database.sqlite（依赖 DATA_DIR 或应用目录）",
+      "schema": "内置 users/workspaces 表，schema.sql 为空；没有 a_stock_master / kline 相关表"
     },
-    "scripts": {
-      "build": "tsc && vite build",
-      "tauri": "tauri"
+    "market_api": {
+      "eastmoney": "fetchEastMoneyPage 调用 push2 clist/get，多页抓取后缓存，字段映射为 symbol/name/price 等临时字段",
+      "fallback": "fetchYingweiPage 作为兜底，刷新价格 refreshPrices 也只调用英为财经",
+      "cache": "marketCache 持内存数据与 total，/api/market 提供分页与关键字过滤"
     },
-    "fs_scan": "仓库内未找到 *.png/*.ico 资源文件，缺失 icon 目录"
+    "process": "server 启动即建库并加载 schema；无定时任务或单独脚本处理行情入库"
   },
   "tech_stack": {
-    "frontend": "Vite 5 + React 18 + TypeScript",
-    "desktop": "Tauri CLI 1.5.x + Rust tauri-build",
-    "config": "bundle.icon 依赖 src-tauri/icons 下的多规格图标"
+    "backend": "Node.js + Express + sqlite3 标准库驱动",
+    "client": "前端 React/Vite 通过 /api/market 读取缓存",
+    "db": "SQLite，本地文件，当前仅基础表"
   },
   "tests": {
-    "current": "暂无自动化测试；构建流程依赖 yarn tauri build 作为验证",
-    "notes": "需要生成图标后重试 tauri build"
+    "current": "仓库无自动化测试；server 未附带测试脚本",
+    "notes": "需要新增本地验证脚本覆盖行情抓取与 SQLite 落库"
   },
   "observation": {
-    "issue": "`yarn tauri build` 报错 `icons/icon.ico not found; required for generating a Windows Resource file during tauri-build`",
-    "suspect": "tauri.conf.json 声明的图标文件不存在，需生成 icons 目录或更新配置",
-    "gaps": "需要确认使用何种方式生成/放置图标（tauri icon 或手工提供基底 PNG）"
-  },
-  "market_page": {
-    "location": "App.tsx / services/marketService.ts",
-    "current_state": {
-      "fetch": "fetchMarketData 使用东方财富接口，通过 allorigins 代理仅取 top list，默认 pageSize=200（调整自 30）",
-      "ui": "Market tab 的输入框未绑定状态，表格/移动列表直接渲染 marketData 无搜索过滤"
-    },
-    "issues": [
-      "无证券主表：仅取排行榜数据，未覆盖全市场、也无分页/搜索接口",
-      "搜索输入未连接 state，用户无法筛选"
+    "gaps": [
+      "缺少 A 股主表与实时行情入库逻辑，无法按要求只刷新价格字段",
+      "未定义 Python 抓取脚本和 SQLite 结构，需新增函数与建表流程",
+      "kline/get、stock/get 未在后端使用，secid 转换逻辑缺失"
     ],
-    "direction": "增加搜索过滤，适当放大抓取数量（pageSize），后续可换为后端证券主表或分页接口"
+    "direction": "新增 Python 脚本：全量抓取 clist/get 入库、实时逐只刷新价格、按 secid 拉取日线并 upsert；创建 a_stock_master 与 a_stock_kline_daily 表"
   }
 }

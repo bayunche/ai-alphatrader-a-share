@@ -1,0 +1,30 @@
+{
+  "topic": "东财A股主表与SQLite落库方案的关键疑问",
+  "questions": [
+    {
+      "priority": "high",
+      "question": "Python 脚本与现有 Node/Express 后端的关系：是作为独立离线抓取脚本（生成 SQLite 供前端/sidecar 读取）还是需要暴露新的 HTTP 接口？",
+      "impact": "决定代码组织、如何被 Tauri sidecar/前端使用，以及数据库文件位置/连接方式。"
+    },
+    {
+      "priority": "high",
+      "question": "数据库文件路径应放在何处以兼容现有 DATA_DIR 约定？",
+      "impact": "需要确保 Tauri sidecar 或本地运行时能共享数据库，避免不同目录生成多个 stock.db。"
+    },
+    {
+      "priority": "medium",
+      "question": "定时只刷新价格字段的调度方式是否需要在 main() 中提供示例循环/cron，或由外部调度器调用 refresh_realtime_quotes_in_db？",
+      "impact": "影响 main 示例实现与文档说明，确保满足“支持定时只刷新价格字段”。"
+    },
+    {
+      "priority": "medium",
+      "question": "Node 侧现有 /api/market 缓存逻辑是否需要改为读取 SQLite 主表，或保持原缓存逻辑仅用作前端兜底？",
+      "impact": "决定是否要对 server/index.js 做额外改造，避免重复抓取/数据不一致。"
+    },
+    {
+      "priority": "low",
+      "question": "是否需要对 K 线入库做截断/增量策略（仅示例股票还是全市场批量），以及是否需要处理数据去重/异常值？",
+      "impact": "决定 save_kline_to_db 的使用示例和潜在性能注意事项。"
+    }
+  ]
+}

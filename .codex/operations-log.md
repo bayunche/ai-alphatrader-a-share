@@ -11,3 +11,9 @@
 - 输出 `.codex/review-report.md`，总结评分与剩余风险。
 - 为样式打包落地本地 Tailwind 流程：新增 `tailwind.config.js`、`postcss.config.js`、`index.css`，在 `index.tsx` 引入并移除 index.html 的 CDN tailwind 引用；排除 tsc 扫描 `src-tauri/target`。本地 `yarn build` 仍因缺少 `@rollup/rollup-linux-x64-gnu` 失败，需要在目标平台重新安装依赖。
 - 行情页完善：将东方财富抓取 pz 提升至 200，作为临时证券主表；为市场搜索框绑定状态与过滤，补充无匹配提示；更新 `.codex/context-scan.json`（market_page）、`.codex/context-question-3.json`、`.codex/context-sufficiency.json` 说明现状。
+- 后端 sidecar 集成：server/index.js 支持 DATA_DIR/PORT、pkg 打包；package.json 增加 build:server/build:desktop 与 pkg 依赖；tauri.conf.json 先跑 build:server 并注册 externalBin=bin/server（去掉重复 target）；main.rs 启动/退出管理 sidecar；API_BASE 改为 VITE_API_BASE 默认 127.0.0.1；README 补充使用说明，.gitignore 忽略 src-tauri/bin/。
+- 补充：build:server 脚本改用 `npx pkg`，避免未全局安装 pkg 时命令找不到。
+- 补充：sidecar 直接生成 `src-tauri/bin/server-x86_64-pc-windows-msvc.exe`，externalBin 配合基名 `bin/server`，避免双重追加 target；Rust 侧启用 `process-command-api` 并用 RunEvent 清理 sidecar。
+- 补充：server `/api/market` 增加多页拉取+缓存（MARKET_MAX_PAGES/MARKET_PAGE_SIZE，可配置），分页返回 total；前端使用后端 total 计算页数，不再本地切片。
+- 补充：前端 fallback 时也会多页抓取东方财富（最多5页）后分页，避免后端不可用时只剩一页数据。
+- 补充：英为财经兜底（VITE_YW_API/YINGWEI_API），导出改用 Tauri fs/dialog，新增依赖 `@tauri-apps/api` 以通过 Rollup 解析。

@@ -1,7 +1,7 @@
 
 import { User, Workspace, ApiResponse } from "../types";
 
-const API_BASE = "http://localhost:3001/api";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:3001/api";
 
 // Helper to check if backend is available (simple heuristic for this demo)
 let isBackendAvailable = false;

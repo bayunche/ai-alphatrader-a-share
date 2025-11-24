@@ -6,15 +6,22 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:server": "npx pkg server/index.js --targets node18-win-x64 --output src-tauri/bin/server-x86_64-pc-windows-msvc.exe",
+    "build:desktop": "yarn build:server && yarn tauri build",
     "preview": "vite preview",
     "tauri": "tauri"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
+    "@tauri-apps/api": "^1.5.6",
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "recharts": "^2.12.2"
+    "recharts": "^2.12.2",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^1.5.9",
@@ -23,9 +30,15 @@
     "@types/react-dom": "^18.2.21",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.18",
+    "pkg": "^5.8.1",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.4.2",
     "vite": "^5.1.5"
+  },
+  "pkg": {
+    "assets": [
+      "server/schema.sql"
+    ]
   }
 }

@@ -1,6 +1,12 @@
 
 import { MarketData } from "../types";
 
+const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:3001/api";
+const YW_API = import.meta.env.VITE_YW_API || "";
+const IS_TAURI = typeof window !== 'undefined' && !!(window as any).__TAURI_IPC__;
+// 默认强制走后端，只有显式设置 VITE_FORCE_BACKEND=false 才允许直接走前端/东财
+const FORCE_BACKEND = import.meta.env.VITE_FORCE_BACKEND !== 'false' || IS_TAURI;
+
 // --- Fallback / Simulation Configuration ---
 
 const MOCK_STOCKS = [
@@ -46,23 +52,51 @@ const parseDoubleSafe = (val: any): number => {
   return isNaN(num) ? 0 : num;
 };
 
-const fetchEastMoneyData = async (): Promise<MarketData[]> => {
-    // East Money Main Board Interface：调大 pz 以覆盖更多证券做“主表”来源
-    const pageSize = 200;
-    const targetUrl = `https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=${pageSize}&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f20&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23&fields=f12,f14,f2,f3,f5`;
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+type MarketResponse = {
+    success: boolean;
+    data: MarketData[];
+    total?: number;
+};
 
-    const res = await fetch(proxyUrl);
-    if (!res.ok) throw new Error("Proxy Network Error");
+const fetchBackendMarketData = async (page: number, pageSize: number, keyword: string): Promise<MarketResponse | null> => {
+    try {
+        const url = new URL(`${API_BASE}/market`);
+        url.searchParams.set('page', String(page));
+        url.searchParams.set('pageSize', String(pageSize));
+        if (keyword) url.searchParams.set('q', keyword);
+
+        console.info("[market] 请求后端市场数据", { url: url.toString(), page, pageSize, keyword });
+        const res = await fetch(url.toString(), { cache: "no-store" });
+        if (!res.ok) throw new Error('backend market response not ok');
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+            return json as MarketResponse;
+        }
+    } catch (e) {
+        console.warn('Backend market fetch failed, fallback to direct source', e);
+        if (FORCE_BACKEND) {
+            throw e;
+        }
+    }
+    return null;
+};
+
+const fetchEastMoneyData = async (page: number, pageSize: number, keyword: string): Promise<MarketResponse> => {
+    const fs = import.meta.env.VITE_EM_FS || 'm:0+t:6,m:0+t:13,m:0+t:80,m:1+t:2,m:1+t:23';
+    const fields = import.meta.env.VITE_EM_FIELDS || 'f12,f13,f14,f2,f3,f4,f5,f6,f15,f16,f17,f18,f20,f21,f9,f23';
+    const fid = import.meta.env.VITE_EM_FID || 'f3';
+    const targetUrl = `https://push2.eastmoney.com/api/qt/clist/get?pn=${page}&pz=${pageSize}&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=${fid}&fs=${encodeURIComponent(fs)}&fields=${encodeURIComponent(fields)}`;
+
+    const res = await fetch(targetUrl);
+    if (!res.ok) throw new Error("EastMoney Network Error");
     
-    const json = await res.json();
-    const data = JSON.parse(json.contents);
+    const data = await res.json();
     
     if (!data?.data?.diff) throw new Error("Invalid API Response Structure");
 
     const list = Array.isArray(data.data.diff) ? data.data.diff : Object.values(data.data.diff);
 
-    return list.map((item: any) => {
+    let mapped = list.map((item: any) => {
         const symbol = item.f12;
         const price = parseDoubleSafe(item.f2);
         
@@ -92,6 +126,46 @@ const fetchEastMoneyData = async (): Promise<MarketData[]> => {
         
         return mkData;
     });
+
+    if (keyword) {
+        const key = keyword.toLowerCase();
+        mapped = mapped.filter((m: MarketData) => m.symbol.toLowerCase().includes(key) || m.name.toLowerCase().includes(key));
+    }
+
+    const total = data?.data?.total ? parseInt(data.data.total, 10) : mapped.length;
+    return { success: true, data: mapped, total };
+};
+
+const fetchYingweiData = async (page: number, pageSize: number, keyword: string): Promise<MarketResponse> => {
+    if (!YW_API) throw new Error("YW_API not configured");
+    const url = new URL(YW_API);
+    url.searchParams.set('page', String(page));
+    url.searchParams.set('pageSize', String(pageSize));
+    if (keyword) url.searchParams.set('q', keyword);
+
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error("Yingwei Network Error");
+    const json = await res.json();
+    const list = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
+    const mapped = list.map((item: any) => ({
+        symbol: item.symbol || item.code || item.ticker || '',
+        name: item.name || item.cn_name || item.displayName || '',
+        price: parseDoubleSafe(item.price ?? item.last ?? item.close),
+        change: parseDoubleSafe(item.change ?? item.chg ?? item.pct_chg),
+        volume: parseDoubleSafe(item.volume ?? item.vol),
+        timestamp: new Date().toISOString(),
+        trend: []
+    })).filter((m: MarketData) => m.symbol && m.name);
+
+    if (keyword) {
+        const key = keyword.toLowerCase();
+        return {
+            success: true,
+            data: mapped.filter((m: MarketData) => m.symbol.toLowerCase().includes(key) || m.name.toLowerCase().includes(key)),
+            total: mapped.length
+        };
+    }
+    return { success: true, data: mapped, total: mapped.length };
 };
 
 const fetchMockUpdate = async (): Promise<MarketData[]> => {
@@ -171,12 +245,38 @@ export const updateSpecificStocks = async (symbols: string[]): Promise<MarketDat
     return updates;
 };
 
-export const fetchMarketData = async (): Promise<MarketData[]> => {
+export const fetchMarketData = async (page = 1, pageSize = 200, keyword = ''): Promise<MarketResponse> => {
+    console.info("[market] fetchMarketData start", { page, pageSize, keyword, API_BASE, FORCE_BACKEND });
+    const backendData = await fetchBackendMarketData(page, pageSize, keyword);
+    if (backendData) return backendData;
+
     try {
-        return await fetchEastMoneyData();
+        return await fetchEastMoneyData(page, pageSize, keyword);
     } catch (e) {
-        // Silent fallback
-        return await fetchMockUpdate();
+        // First fallback: Yingwei (需配置 VITE_YW_API)
+        try {
+            return await fetchYingweiData(page, pageSize, keyword);
+        } catch (_) {
+            // continue
+        }
+
+        // Second fallback: try多页拉取补齐覆盖度
+        const maxPages = 5;
+        const combined: MarketData[] = [];
+        for (let i = 1; i <= maxPages; i++) {
+            try {
+                const pageResp = await fetchEastMoneyData(i, pageSize, keyword);
+                combined.push(...pageResp.data);
+                if (pageResp.data.length < pageSize) break;
+            } catch (_) {
+                break;
+            }
+        }
+        if (combined.length === 0) {
+            return { success: true, data: await fetchMockUpdate(), total: pageSize };
+        }
+        const start = (page - 1) * pageSize;
+        return { success: true, data: combined.slice(start, start + pageSize), total: combined.length };
     }
 };
 

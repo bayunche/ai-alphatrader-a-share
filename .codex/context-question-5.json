@@ -1,0 +1,12 @@
+{
+  "question": "SQLite 文件应放在哪个目录以兼容现有后端？",
+  "why_this_matters": "Python 脚本需与现有 Node sidecar/前端共享数据，避免多个 SQLite 副本造成不一致。",
+  "finding": {
+    "evidence": [
+      "server/index.js: 数据目录 dataDir = process.env.DATA_DIR || appRoot，数据库路径 dbPath = path.join(dataDir, 'database.sqlite')。",
+      "当前 schema.sql 为空，实际运行使用内置 users/workspaces 表，尚未创建 A 股相关表。",
+      "仓库根目录不存在 stock.db/database.sqlite 文件，Python 可自由创建 stock.db；如需兼容 sidecar，需支持通过环境变量或路径参数覆盖。"
+    ],
+    "conclusion": "默认按需求在 Python 脚本顶部使用 DB_PATH = 'stock.db'，并允许通过环境变量或参数覆盖以指向 DATA_DIR/database.sqlite；在 main 示例说明可与 sidecar 共用路径。"
+  }
+}

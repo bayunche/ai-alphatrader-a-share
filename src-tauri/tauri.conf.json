@@ -1,14 +1,14 @@
 {
   "build": {
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "yarn build:server && yarn build",
     "devPath": "http://localhost:1420",
     "distDir": "../dist",
     "withGlobalTauri": true
   },
   "package": {
     "productName": "AI AlphaTrader",
-    "version": "1.0.0"
+    "version": "1.0.1"
   },
   "tauri": {
     "allowlist": {
@@ -21,6 +21,16 @@
         "all": true,
         "request": true,
         "scope": ["http://**", "https://**"]
+      },
+      "fs": {
+        "all": false,
+        "writeFile": true
+      },
+      "dialog": {
+        "all": false,
+        "open": true,
+        "message": true,
+        "save": true
       }
     },
     "windows": [
@@ -35,19 +45,26 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://aistudiocdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' http://localhost:* https://* wss://*; img-src 'self' data: https://*;"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://aistudiocdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' http://localhost:* http://127.0.0.1:* https://* wss://* data:; img-src 'self' data: https://*;"
     },
     "bundle": {
       "active": true,
       "targets": "all",
       "identifier": "com.alpha-trader.app",
+      "externalBin": [
+        "bin/server"
+      ],
       "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
+        "../assets/desktop_icon_rgba.png"
+      ],
+      "resources": [
+        "../assets/desktop_icon_rgba.png",
+        "../assets/tray_icon_rgba.png"
       ]
+    },
+    "systemTray": {
+      "iconPath": "../assets/tray_icon_rgba.png",
+      "iconAsTemplate": false
     }
   }
 }

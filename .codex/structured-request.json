@@ -1,0 +1,25 @@
+{
+  "requester": "user",
+  "timestamp": "2025-11-24T00:00:00+08:00",
+  "goal": "实现后端抓取与入库逻辑：调用东方财富 push2/push2his 接口全量拉取 A 股主表，保存至本地 SQLite；提供实时单只行情刷新仅更新价格字段；支持日线 K 线拉取并入库。",
+  "must_use_interfaces": [
+    "https://push2.eastmoney.com/api/qt/clist/get",
+    "https://push2.eastmoney.com/api/qt/stock/get",
+    "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+  ],
+  "deliverables": [
+    "Python 脚本（包含 fetch_a_stock_list/init_db/save_master_to_db/fetch_realtime_quote/refresh_realtime_quotes_in_db/fetch_kline_history/save_kline_to_db/main 示例）",
+    "SQLite 表 a_stock_master 与 a_stock_kline_daily 以及唯一索引",
+    "示例使用流程与必要文档更新"
+  ],
+  "constraints": [
+    "字段映射与参数必须按用户指定值与除以 100 规则处理",
+    "数据库操作仅用 sqlite3 标准库，不使用 ORM",
+    "中文注释，禁止自研安全设计，优先复用标准库/生态"
+  ],
+  "open_questions": [
+    "Python 脚本与现有 Node sidecar 的协同方式（是否需要 HTTP 包装）",
+    "DB 文件路径是否需要与 DATA_DIR/database.sqlite 对齐",
+    "定时刷新价格的调度方式是示例还是生产需求"
+  ]
+}

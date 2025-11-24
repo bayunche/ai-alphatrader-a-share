@@ -17,7 +17,21 @@ import { useAuth } from './contexts/AuthContext';
 import { 
   Play, Pause, FileDown, Search, Zap, Menu, Eye
 } from 'lucide-react';
+// @ts-ignore
+import { writeTextFile } from '@tauri-apps/api/fs';
+// @ts-ignore
+import { save } from '@tauri-apps/api/dialog';
 import { useTranslation } from './contexts/LanguageContext';
+
+const isTradingTimeNow = () => {
+  const now = new Date();
+  const day = now.getDay();
+  if (day === 0 || day === 6) return false; // 周末休市
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const morning = minutes >= (9 * 60 + 30) && minutes < (11 * 60 + 30);
+  const afternoon = minutes >= (13 * 60) && minutes < (15 * 60);
+  return morning || afternoon;
+};
 
 function App() {
   const { user } = useAuth();
@@ -58,8 +72,11 @@ function App() {
 
   const [marketData, setMarketData] = useState<MarketData[]>([]);
   const [marketSearch, setMarketSearch] = useState('');
+  const [marketPage, setMarketPage] = useState(1);
+  const pageSize = 50;
   const [tradeHistory, setTradeHistory] = useState<TradeExecution[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const tradingWindowRef = useRef<boolean>(false);
 
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -104,6 +121,24 @@ function App() {
       loadData();
 
   }, [user]);
+
+  // 全局错误捕获：包含未捕获异常与未处理的 Promise 拒绝（外部接口/后端等）
+  useEffect(() => {
+      const onError = (event: ErrorEvent) => {
+          console.error('Global Error', event.error || event.message);
+          alert(`发生错误：${event.message || '未知错误'}`);
+      };
+      const onRejection = (event: PromiseRejectionEvent) => {
+          console.error('Unhandled Rejection', event.reason);
+          alert(`请求失败：${event.reason?.message || event.reason || '未知原因'}`);
+      };
+      window.addEventListener('error', onError);
+      window.addEventListener('unhandledrejection', onRejection);
+      return () => {
+          window.removeEventListener('error', onError);
+          window.removeEventListener('unhandledrejection', onRejection);
+      };
+  }, []);
 
   useEffect(() => {
       if (!user || !isDataLoaded) return;
@@ -298,39 +333,63 @@ function App() {
         });
   }, [language, executeTradeForAgent]);
 
-  const filteredMarketData = useMemo(() => {
-      const keyword = marketSearch.trim().toLowerCase();
-      if (!keyword) return marketData;
-      return marketData.filter(item => 
-          item.symbol.toLowerCase().includes(keyword) || 
-          item.name.toLowerCase().includes(keyword)
-      );
-  }, [marketData, marketSearch]);
+  const [marketTotal, setMarketTotal] = useState(0);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(marketTotal / pageSize)), [marketTotal]);
+  const pagedMarketData = useMemo(() => marketData, [marketData]);
 
 
   // -- Main Loop --
   useEffect(() => {
-    if (!user || !isDataLoaded) return;
-
     const runTradingCycle = async () => {
+        const isTrading = isTradingTimeNow();
+        if (!user) {
+            addLog('SYSTEM', '未登录，仍拉取行情列表用于浏览');
+        }
+        if (!isDataLoaded) {
+            addLog('SYSTEM', '数据尚未加载完成，仍尝试拉取行情用于展示');
+        }
+        if (!isTrading && tradingWindowRef.current) {
+            tradingWindowRef.current = false;
+            addLog('SYSTEM', '当前非 A 股交易时段，暂停实时刷新，但继续拉取市场列表');
+        } else if (isTrading && !tradingWindowRef.current) {
+            tradingWindowRef.current = true;
+            addLog('SYSTEM', '进入交易时段，恢复实时刷新与分析');
+        }
+
         try {
-            const data = await fetchMarketData();
-            
-            setMarketData(prev => {
-                const combined = [...data];
-                prev.forEach(p => {
-                    if (!combined.find(c => c.symbol === p.symbol)) {
-                        combined.push(p);
+            const resp = await fetchMarketData(marketPage, pageSize, marketSearch);
+            let baseData = resp.data;
+
+            // 搜索模式下不混入持仓，保持后端分页/搜索结果纯净
+            if (!marketSearch.trim()) {
+                const holdingSymbols = Array.from(new Set(
+                    agentsRef.current.flatMap(a => a.portfolio.positions.map(p => p.symbol))
+                ));
+                const missingSymbols = holdingSymbols.filter(sym => !baseData.find(m => m.symbol === sym));
+                if (missingSymbols.length > 0) {
+                    try {
+                        const supplements = await updateSpecificStocks(missingSymbols);
+                        baseData = [...baseData, ...supplements];
+                    } catch (e) {
+                        console.warn('补齐持仓行情失败，使用现有数据', e);
                     }
-                });
-                return combined;
-            });
+                }
+                setMarketTotal((resp.total || resp.data.length) + (baseData.length - resp.data.length));
+            } else {
+                setMarketTotal(resp.total || resp.data.length);
+            }
+
+            setMarketData(baseData);
 
             const nowStr = new Date().toISOString();
 
+            if (!user || !isDataLoaded) {
+                return;
+            }
+
             setAgents(prevAgents => prevAgents.map(agent => {
                 const newPositions = agent.portfolio.positions.map(pos => {
-                    const latestPrice = data.find(d => d.symbol === pos.symbol)?.price || pos.currentPrice;
+                    const latestPrice = resp.data.find(d => d.symbol === pos.symbol)?.price || pos.currentPrice;
                     return {
                         ...pos,
                         currentPrice: latestPrice,
@@ -348,21 +407,22 @@ function App() {
             }));
 
             const marketWideAgents = agentsRef.current.filter(a => !a.assignedPoolId);
-            if (globalRunning && data.length > 0 && marketWideAgents.length > 0) {
+            if (isTrading && globalRunning && baseData.length > 0 && marketWideAgents.length > 0) {
                 addLog('INFO', `Starting global market scan for ${marketWideAgents.length} agents...`);
-                runAIAnalysis(data, marketWideAgents);
+                runAIAnalysis(baseData, marketWideAgents);
             }
 
-        } catch (err) {
+        } catch (err: any) {
             console.error("Trading Cycle Error:", err);
             addLog('ERROR', 'Failed to fetch market data or execute cycle');
+            alert('行情拉取失败：' + (err?.message || '请检查网络或后端'));
         }
     };
 
     runTradingCycle();
     const interval = setInterval(runTradingCycle, 60000);
     return () => clearInterval(interval);
-  }, [globalRunning, runAIAnalysis, user, isDataLoaded, addLog]);
+  }, [globalRunning, runAIAnalysis, user, isDataLoaded, addLog, marketPage, marketSearch]);
 
 
   // -- Fast Loop (Pools) --
@@ -374,12 +434,39 @@ function App() {
 
       let timeoutId: ReturnType<typeof setTimeout>;
 
-      const runPoolCycle = async () => {
+    const runPoolCycle = async () => {
+          if (!isTradingTimeNow()) {
+              timeoutId = setTimeout(runPoolCycle, 1000 * 60);
+              return;
+          }
           if (globalRunningRef.current && poolsRef.current.length > 0) {
-              const allSymbols = Array.from(new Set(poolsRef.current.flatMap(p => p.symbols))) as string[];
+              // 汇总池内标的 + 池内智能体的当前持仓，确保持仓价格更新并参与分析
+              const agentPositionsByPool: Record<string, Set<string>> = {};
+              agentsRef.current.forEach(a => {
+                  if (!a.assignedPoolId) return;
+                  const set = agentPositionsByPool[a.assignedPoolId] || new Set<string>();
+                  a.portfolio.positions.forEach(p => set.add(p.symbol));
+                  agentPositionsByPool[a.assignedPoolId] = set;
+              });
+
+              const mergedSymbols = new Set<string>();
+              poolsRef.current.forEach(p => {
+                  p.symbols.forEach(s => mergedSymbols.add(s));
+                  const pos = agentPositionsByPool[p.id];
+                  if (pos) pos.forEach(s => mergedSymbols.add(s));
+              });
+              const allSymbols = Array.from(mergedSymbols);
               
               if (allSymbols.length > 0) {
-                  const updates = await updateSpecificStocks(allSymbols);
+                  let updates: MarketData[] = [];
+                  try {
+                      updates = await updateSpecificStocks(allSymbols);
+                  } catch (e: any) {
+                      console.error("Pool update error", e);
+                      alert('池内行情更新失败：' + (e?.message || '请检查网络'));
+                      timeoutId = setTimeout(runPoolCycle, Math.floor(Math.random() * 10000) + 5000);
+                      return;
+                  }
                   
                   setMarketData(prev => {
                       const map = new Map(prev.map(i => [i.symbol, i]));
@@ -389,7 +476,8 @@ function App() {
 
                   poolsRef.current.forEach(pool => {
                       const poolAgents = agentsRef.current.filter(a => a.assignedPoolId === pool.id);
-                      const poolStocks = updates.filter(u => pool.symbols.includes(u.symbol));
+                      const poolSymbols = new Set<string>([...pool.symbols, ...(agentPositionsByPool[pool.id] || new Set<string>())]);
+                      const poolStocks = updates.filter(u => poolSymbols.has(u.symbol));
                       
                       if (poolAgents.length > 0 && poolStocks.length > 0) {
                          addLog('POOL', `Fast Refresh: ${pool.name} (${poolStocks.length} stocks) -> ${poolAgents.length} Agents`);
@@ -466,18 +554,19 @@ function App() {
   };
 
   // Export System Snapshot (JSON)
-  const handleExportSnapshot = () => {
+  const handleExportSnapshot = async () => {
       const dataStr = JSON.stringify({ agents, tradeHistory, logs, user, stockPools, notificationConfig }, null, 2);
-      const blob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `alpha_trader_${user?.username}_snapshot.json`;
-      a.click();
+      const suggested = `alpha_trader_${user?.username || 'snapshot'}.json`;
+      const targetPath = await save({
+        defaultPath: suggested,
+        filters: [{ name: 'JSON', extensions: ['json'] }]
+      });
+      if (!targetPath) return;
+      await writeTextFile(targetPath, dataStr);
   };
 
   // Export Trade History (CSV for Excel)
-  const handleExportHistoryCSV = () => {
+  const handleExportHistoryCSV = async () => {
       const headers = [
           t('time'), t('agent'), t('action'), t('symbol'), 
           t('price'), 'Quantity', 'Total Value', 
@@ -501,16 +590,15 @@ function App() {
           ].join(',');
       });
 
-      // Add BOM (\uFEFF) so Excel opens UTF-8 correctly
       const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      // Format filename
       const dateStr = new Date().toISOString().split('T')[0];
-      a.download = `trade_history_${user?.username}_${dateStr}.csv`;
-      a.click();
+      const suggested = `trade_history_${user?.username || 'user'}_${dateStr}.csv`;
+      const targetPath = await save({
+        defaultPath: suggested,
+        filters: [{ name: 'CSV', extensions: ['csv'] }]
+      });
+      if (!targetPath) return;
+      await writeTextFile(targetPath, csvContent);
   };
 
   // Update specific agent portfolio from FundManagement
@@ -731,14 +819,29 @@ function App() {
                     <div className="bg-white/5 backdrop-blur-xl border border-glass-border rounded-3xl overflow-hidden shadow-2xl">
                          <div className="p-4 border-b border-white/5 flex justify-between items-center">
                              <h3 className="text-white ml-2">{t('marketOverview')}</h3>
-                             <div className="relative">
-                                 <Search className="w-4 h-4 absolute left-3 top-2.5 text-neutral-500" />
-                                 <input 
-                                    placeholder="按代码/名称搜索" 
-                                    className="bg-black/20 border border-white/10 rounded-full pl-9 pr-4 py-1.5 text-sm text-white focus:outline-none focus:bg-black/40 w-32 md:w-auto" 
-                                    value={marketSearch}
-                                    onChange={(e) => setMarketSearch(e.target.value)}
-                                 />
+                             <div className="flex items-center gap-3">
+                                 <div className="relative">
+                                     <Search className="w-4 h-4 absolute left-3 top-2.5 text-neutral-500" />
+                                     <input 
+                                        placeholder="按代码/名称首字母" 
+                                        className="bg-black/20 border border-white/10 rounded-full pl-9 pr-4 py-1.5 text-sm text-white focus:outline-none focus:bg-black/40 w-32 md:w-auto" 
+                                        value={marketSearch}
+                                        onChange={(e) => { setMarketPage(1); setMarketSearch(e.target.value); }}
+                                     />
+                                 </div>
+                                 <div className="flex items-center gap-2 text-xs text-neutral-400">
+                                    <button 
+                                        disabled={marketPage <= 1}
+                                        onClick={() => setMarketPage(p => Math.max(1, p - 1))}
+                                        className="px-2 py-1 rounded border border-white/10 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >上一页</button>
+                                    <span className="text-neutral-300">{marketPage} / {totalPages}</span>
+                                    <button 
+                                        disabled={marketPage >= totalPages}
+                                        onClick={() => setMarketPage(p => Math.min(totalPages, p + 1))}
+                                        className="px-2 py-1 rounded border border-white/10 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >下一页</button>
+                                 </div>
                              </div>
                         </div>
                         <div className="hidden md:block">
@@ -752,7 +855,7 @@ function App() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {filteredMarketData.map(m => (
+                                    {pagedMarketData.map(m => (
                                         <tr key={m.symbol} className="hover:bg-white/5 transition-colors">
                                             <td className="py-4 px-6 font-medium text-white">{m.name} <span className="text-neutral-500 text-xs ml-2 font-normal">{m.symbol}</span></td>
                                             <td className="py-4 px-6 text-right font-mono text-neutral-200">¥{m.price.toFixed(2)}</td>
@@ -768,7 +871,7 @@ function App() {
                             </table>
                         </div>
                          <div className="md:hidden divide-y divide-white/5">
-                            {filteredMarketData.map(m => (
+                            {pagedMarketData.map(m => (
                                 <div key={m.symbol} className="p-4">
                                     <div className="flex justify-between items-start">
                                         <div>
@@ -785,7 +888,7 @@ function App() {
                                 </div>
                             ))}
                         </div>
-                        {filteredMarketData.length === 0 && (
+                        {marketData.length === 0 && (
                             <div className="p-6 text-center text-neutral-500 text-sm">
                                 {marketSearch ? '未找到匹配的证券代码或名称' : '暂无行情数据'}
                             </div>

@@ -31,10 +31,12 @@ GEMINI_API_KEY=your_key_here
 2. 前端开发：`npm run dev`（Vite，默认监听 5173）
 3. 后端启动（可选）：`cd server && npm install && npm start`（默认 3001）
 4. 预览打包产物：`npm run preview`
+5. （可选）自定义后端地址：在 `.env.local` 设置 `VITE_API_BASE=http://127.0.0.1:3001/api` 以覆盖默认接口基址。
 
 ## 构建与打包
 - Web 构建：`npm run build`（先运行 TypeScript 检查，再产出 `dist/`）
-- 桌面打包：`npm run tauri`（需要 Rust；产物位于 `src-tauri/target`）
+- 后端打包（Tauri sidecar）：`yarn build:server`，基于 `pkg` 将 `server/index.js` 打成 `src-tauri/bin/server.exe`，并内置 `schema.sql`，数据库文件落在 Tauri 的 app 数据目录（通过 `DATA_DIR` 环境变量）。
+- 桌面打包：`yarn build:desktop`（等价于 `yarn build:server && yarn tauri build`，需要 Rust；产物位于 `src-tauri/target`）
 - 部署建议：将 `dist/` 交由任意静态资源服务器（如 Nginx）；后端服务独立部署，确保前端调用的 API 基址已在服务封装中配置或由环境变量提供。
 
 ## 测试

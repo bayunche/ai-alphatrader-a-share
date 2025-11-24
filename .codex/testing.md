@@ -14,3 +14,12 @@
 - 命令：`yarn build`（添加本地 Tailwind 流程后）
 - 结果：失败
 - 输出摘要：缺少 `@rollup/rollup-linux-x64-gnu` 可选依赖导致 rollup native 加载失败；需在目标平台重装依赖或显式安装对应 rollup 二进制包。
+- 命令：`yarn build:server` / `yarn build:desktop`
+- 结果：未执行（需在 Windows 环境安装 `pkg` 产出 `src-tauri/bin/server.exe` 后再跑 `yarn tauri build`）
+- 结论：Sidecar 集成完成但未在本地验证；请在目标平台执行 `yarn build:server && yarn tauri build`。
+- 命令：`yarn tauri build`（Windows）
+- 结果：成功（有 chunk size warning 与 main.rs 编译警告已清理）
+- 输出摘要：产出 MSI/NSIS 安装包；后端 sidecar 启动成功。
+- 命令：`python3 server/test_eastmoney.py`
+- 结果：失败
+- 输出摘要：环境缺少 pandas 依赖（ModuleNotFoundError: No module named 'pandas'），未能执行单元测试；需先安装 pandas/requests 再重试。
