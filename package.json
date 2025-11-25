@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:server": "npx pkg server/index.js --targets node18-win-x64 --output src-tauri/bin/server-x86_64-pc-windows-msvc.exe",
+    "build:server": "powershell -Command \"if (Get-Process server-x86_64-pc-windows-msvc -ErrorAction SilentlyContinue) { Stop-Process -Name server-x86_64-pc-windows-msvc -Force -ErrorAction SilentlyContinue } ; if (Test-Path 'src-tauri/bin/server-x86_64-pc-windows-msvc.exe') { Remove-Item 'src-tauri/bin/server-x86_64-pc-windows-msvc.exe' -Force -ErrorAction SilentlyContinue }\" && npx pkg server/index.js --targets node18-win-x64 --output src-tauri/bin/server-x86_64-pc-windows-msvc.exe",
+    "build:akshare": "pyinstaller --onefile --name akshare_service server/akshare_service.py && node scripts/prepare-akshare.cjs",
     "build:desktop": "yarn build:server && yarn tauri build",
     "preview": "vite preview",
     "tauri": "tauri"

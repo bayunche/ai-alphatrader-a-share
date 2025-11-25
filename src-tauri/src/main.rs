@@ -9,6 +9,8 @@ use tauri::{
 
 #[derive(Default)]
 struct BackendState(Arc<Mutex<Option<CommandChild>>>);
+#[derive(Default)]
+struct AkshareState(Arc<Mutex<Option<CommandChild>>>);
 
 impl BackendState {
     fn set_child(&self, child: CommandChild) {
@@ -17,6 +19,20 @@ impl BackendState {
         }
     }
 
+    fn kill(&self) {
+        if let Ok(mut guard) = self.0.lock() {
+            if let Some(child) = guard.take() {
+                let _ = child.kill();
+            }
+        }
+    }
+}
+impl AkshareState {
+    fn set_child(&self, child: CommandChild) {
+        if let Ok(mut guard) = self.0.lock() {
+            *guard = Some(child);
+        }
+    }
     fn kill(&self) {
         if let Ok(mut guard) = self.0.lock() {
             if let Some(child) = guard.take() {
@@ -34,6 +50,7 @@ fn main() {
 
     tauri::Builder::default()
         .manage(BackendState::default())
+        .manage(AkshareState::default())
         .system_tray(system_tray)
         .on_system_tray_event(|app, event| match event {
             SystemTrayEvent::MenuItemClick { id, .. } => {
@@ -46,6 +63,8 @@ fn main() {
                     // 托盘退出时立即杀掉 sidecar，再退出应用
                     let state = app.state::<BackendState>();
                     state.kill();
+                    let ak = app.state::<AkshareState>();
+                    ak.kill();
                     app.exit(0);
                 }
             }
@@ -65,9 +84,11 @@ fn main() {
             std::fs::create_dir_all(&data_dir)?;
 
             let state = app.state::<BackendState>().inner();
+            let ak_state = app.state::<AkshareState>().inner();
             let mut envs = HashMap::new();
             envs.insert("DATA_DIR".to_string(), data_dir.to_string_lossy().to_string());
-            envs.insert("PORT".to_string(), "3001".to_string());
+            envs.insert("PORT".to_string(), "38211".to_string());
+            envs.insert("AKSHARE_BASE".to_string(), "http://127.0.0.1:18118".to_string());
 
             let (_rx, child) = Command::new_sidecar("server")
                 .map_err(|e| format!("failed to setup sidecar: {e}"))?
@@ -76,6 +97,20 @@ fn main() {
                 .map_err(|e| format!("failed to spawn sidecar: {e}"))?;
 
             state.set_child(child);
+
+            // 启动 akshare sidecar，如失败不影响主流程
+            match Command::new_sidecar("akshare_service") {
+                Ok(cmd) => {
+                    let (_rx2, ak_child) = cmd
+                        .envs(HashMap::from([("AK_PORT".to_string(), "18118".to_string())]))
+                        .spawn()
+                        .map_err(|e| format!("failed to spawn akshare sidecar: {e}"))?;
+                    ak_state.set_child(ak_child);
+                }
+                Err(e) => {
+                    eprintln!("akshare sidecar setup failed: {e}");
+                }
+            }
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -93,6 +128,8 @@ fn main() {
                 RunEvent::ExitRequested { .. } | RunEvent::Exit { .. } => {
                     let state = app_handle.state::<BackendState>();
                     state.kill();
+                    let ak = app_handle.state::<AkshareState>();
+                    ak.kill();
                 }
                 _ => {}
             }

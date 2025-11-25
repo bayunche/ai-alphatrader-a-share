@@ -1,11 +1,11 @@
-
+﻿
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { 
   MarketData, TradeExecution, LogEntry, 
   TradeAction, BrokerConfig, TradingAgent, StockPool, NotificationConfig, PortfolioState
 } from './types';
-import { fetchMarketData, resetMarketService, triggerBackendRefresh, updateSpecificStocks } from './services/marketService';
+import { fetchBatchQuotes, fetchMarketData, resetMarketService, triggerBackendRefresh, updateSpecificStocks } from './services/marketService';
 import { analyzeMarket } from './services/geminiService';
 import { dataApi } from './services/api'; 
 import { sendNotification } from './services/notificationService';
@@ -26,7 +26,7 @@ import { useTranslation } from './contexts/LanguageContext';
 const isTradingTimeNow = () => {
   const now = new Date();
   const day = now.getDay();
-  if (day === 0 || day === 6) return false; // 周末休市
+  if (day === 0 || day === 6) return false; // 鍛ㄦ湯浼戝競
   const minutes = now.getHours() * 60 + now.getMinutes();
   const morning = minutes >= (9 * 60 + 30) && minutes < (11 * 60 + 30);
   const afternoon = minutes >= (13 * 60) && minutes < (15 * 60);
@@ -123,15 +123,15 @@ function App() {
 
   }, [user]);
 
-  // 全局错误捕获：包含未捕获异常与未处理的 Promise 拒绝（外部接口/后端等）
+  // 鍏ㄥ眬閿欒鎹曡幏锛氬寘鍚湭鎹曡幏寮傚父涓庢湭澶勭悊鐨?Promise 鎷掔粷锛堝閮ㄦ帴鍙?鍚庣绛夛級
   useEffect(() => {
       const onError = (event: ErrorEvent) => {
           console.error('Global Error', event.error || event.message);
-          alert(`发生错误：${event.message || '未知错误'}`);
+          alert(`鍙戠敓閿欒锛?{event.message || '鏈煡閿欒'}`);
       };
       const onRejection = (event: PromiseRejectionEvent) => {
           console.error('Unhandled Rejection', event.reason);
-          alert(`请求失败：${event.reason?.message || event.reason || '未知原因'}`);
+          alert(`璇锋眰澶辫触锛?{event.reason?.message || event.reason || '鏈煡鍘熷洜'}`);
       };
       window.addEventListener('error', onError);
       window.addEventListener('unhandledrejection', onRejection);
@@ -337,6 +337,34 @@ function App() {
   const [marketTotal, setMarketTotal] = useState(0);
   const totalPages = useMemo(() => Math.max(1, Math.ceil(marketTotal / pageSize)), [marketTotal]);
   const pagedMarketData = useMemo(() => marketData, [marketData]);
+  const totalPagesRef = useRef<number>(1);
+  useEffect(() => { totalPagesRef.current = totalPages; }, [totalPages]);
+
+  // -- Light realtime refresh for褰撳墠椤碉紙姣?~15绉掞紝鎵归噺10鏉★級 --
+  useEffect(() => {
+    if (marketData.length === 0) return;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const run = async () => {
+      const symbols = marketData.slice(0, 10).map(m => m.symbol);
+      if (symbols.length === 0) return;
+      try {
+        const quotes = await fetchBatchQuotes(symbols);
+        if (quotes.length > 0) {
+          setMarketData(prev => {
+            const map = new Map(prev.map(i => [i.symbol, i]));
+            quotes.forEach(q => map.set(q.symbol, { ...map.get(q.symbol), ...q }));
+            return Array.from(map.values());
+          });
+        }
+      } catch (e) {
+        console.warn('Light realtime refresh failed', e);
+      }
+      const delay = Math.floor(Math.random() * 15000) + 15000; // 15~30s
+      timeoutId = setTimeout(run, delay);
+    };
+    run();
+    return () => clearTimeout(timeoutId);
+  }, [marketData]);
 
 
   // -- Main Loop --
@@ -344,14 +372,14 @@ function App() {
     const runTradingCycle = async () => {
         const isTrading = isTradingTimeNow();
         if (!user) {
-            addLog('SYSTEM', '未登录，仍拉取行情列表用于浏览');
+            addLog('SYSTEM', '未登录，先展示行情列表');
         }
         if (!isDataLoaded) {
-            addLog('SYSTEM', '数据尚未加载完成，仍尝试拉取行情用于展示');
+            addLog('SYSTEM', '数据未加载完成，先尝试拉取行情用于展示');
         }
         if (!isTrading && tradingWindowRef.current) {
             tradingWindowRef.current = false;
-            addLog('SYSTEM', '当前非 A 股交易时段，暂停实时刷新，但继续拉取市场列表');
+            addLog('SYSTEM', '当前非交易时段，暂停实时刷新，仅保留行情列表');
         } else if (isTrading && !tradingWindowRef.current) {
             tradingWindowRef.current = true;
             addLog('SYSTEM', '进入交易时段，恢复实时刷新与分析');
@@ -361,7 +389,7 @@ function App() {
             const resp = await fetchMarketData(marketPage, pageSize, marketSearch);
             let baseData = resp.data;
 
-            // 搜索模式下不混入持仓，保持后端分页/搜索结果纯净
+            // 鎼滅储妯″紡涓嬩笉娣峰叆鎸佷粨锛屼繚鎸佸悗绔垎椤?鎼滅储缁撴灉绾噣
             if (!marketSearch.trim()) {
                 const holdingSymbols = Array.from(new Set(
                     agentsRef.current.flatMap(a => a.portfolio.positions.map(p => p.symbol))
@@ -372,12 +400,30 @@ function App() {
                         const supplements = await updateSpecificStocks(missingSymbols);
                         baseData = [...baseData, ...supplements];
                     } catch (e) {
-                        console.warn('补齐持仓行情失败，使用现有数据', e);
+                        console.warn('Pool supplement quotes failed, using existing data', e);
                     }
                 }
                 setMarketTotal((resp.total || resp.data.length) + (baseData.length - resp.data.length));
             } else {
                 setMarketTotal(resp.total || resp.data.length);
+            }
+            totalPagesRef.current = Math.max(1, Math.ceil((resp.total || baseData.length) / pageSize));
+
+            // 关键代码（持仓）强制补价，确保交易用到最新价格
+            const criticalSymbols = new Set<string>(
+              agentsRef.current.flatMap(a => a.portfolio.positions.map(p => p.symbol))
+            );
+            if (criticalSymbols.size > 0) {
+              try {
+                const quotes = await fetchBatchQuotes(Array.from(criticalSymbols).slice(0, 100));
+                if (quotes.length > 0) {
+                  const map = new Map(baseData.map(i => [i.symbol, i]));
+                  quotes.forEach(q => map.set(q.symbol, { ...map.get(q.symbol), ...q }));
+                  baseData = Array.from(map.values());
+                }
+              } catch (e) {
+                console.warn('Critical quotes refresh failed', e);
+              }
             }
 
             setMarketData(baseData);
@@ -408,21 +454,30 @@ function App() {
             }));
 
             const marketWideAgents = agentsRef.current.filter(a => !a.assignedPoolId);
-            if (isTrading && globalRunning && baseData.length > 0 && marketWideAgents.length > 0) {
+            const tradeCandidates = baseData.filter(d => d.price > 0);
+            if (isTrading && globalRunning && tradeCandidates.length > 0 && marketWideAgents.length > 0) {
                 addLog('INFO', `Starting global market scan for ${marketWideAgents.length} agents...`);
-                runAIAnalysis(baseData, marketWideAgents);
+                runAIAnalysis(tradeCandidates, marketWideAgents);
             }
+
+            // 模拟人工翻页：处理完当前页后再切到下一页，下一次轮询才会请求下一页
+            const nextPage = marketPage >= totalPagesRef.current ? 1 : marketPage + 1;
+            setMarketPage(nextPage);
 
         } catch (err: any) {
             console.error("Trading Cycle Error:", err);
-            addLog('ERROR', 'Failed to fetch market data or execute cycle');
-            alert('行情拉取失败：' + (err?.message || '请检查网络或后端'));
+            addLog('ERROR', `Failed to fetch market data, will retry soon: ${err?.message || ''}`);
+            setTimeout(runTradingCycle, 5000);
+            return;
         }
     };
 
-    runTradingCycle();
+    const initial = setTimeout(runTradingCycle, 2000);
     const interval = setInterval(runTradingCycle, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(interval);
+    };
   }, [globalRunning, runAIAnalysis, user, isDataLoaded, addLog, marketPage, marketSearch]);
 
 
@@ -441,7 +496,7 @@ function App() {
               return;
           }
           if (globalRunningRef.current && poolsRef.current.length > 0) {
-              // 汇总池内标的 + 池内智能体的当前持仓，确保持仓价格更新并参与分析
+              // 姹囨€绘睜鍐呮爣鐨?+ 姹犲唴鏅鸿兘浣撶殑褰撳墠鎸佷粨锛岀‘淇濇寔浠撲环鏍兼洿鏂板苟鍙備笌鍒嗘瀽
               const agentPositionsByPool: Record<string, Set<string>> = {};
               agentsRef.current.forEach(a => {
                   if (!a.assignedPoolId) return;
@@ -464,8 +519,8 @@ function App() {
                       updates = await updateSpecificStocks(allSymbols);
                   } catch (e: any) {
                       console.error("Pool update error", e);
-                      alert('池内行情更新失败：' + (e?.message || '请检查网络'));
-                      timeoutId = setTimeout(runPoolCycle, Math.floor(Math.random() * 10000) + 5000);
+                      addLog('ERROR', `Pool quotes refresh failed, retry soon: ${e?.message || ''}`);
+                      timeoutId = setTimeout(runPoolCycle, Math.floor(Math.random() * 15000) + 15000); // 15~30s
                       return;
                   }
                   
@@ -487,7 +542,7 @@ function App() {
                   });
               }
           }
-          const nextDelay = Math.floor(Math.random() * 10000) + 5000; 
+          const nextDelay = Math.floor(Math.random() * 15000) + 15000; // 15~30s
           timeoutId = setTimeout(runPoolCycle, nextDelay);
       };
 
@@ -732,7 +787,7 @@ function App() {
                                     </div>
                                     <div className="space-y-1">
                                         <p className="text-xs text-neutral-500 uppercase tracking-wider">{t('equity')}</p>
-                                        <p className="text-xl font-mono text-white">¥{agent.portfolio.totalEquity.toLocaleString()}</p>
+                                        <p className="text-xl font-mono text-white">楼{agent.portfolio.totalEquity.toLocaleString()}</p>
                                     </div>
                                     <div className="mt-4 pt-4 border-t border-white/5 flex justify-between text-xs text-neutral-400">
                                         <span className="font-mono">{agent.config.modelName}</span>
@@ -778,7 +833,7 @@ function App() {
                                                      {tradeItem.strategyId}
                                                  </span>
                                              </td>
-                                             <td className="py-4 text-right pr-4 font-mono text-neutral-300">¥{tradeItem.price.toFixed(2)}</td>
+                                             <td className="py-4 text-right pr-4 font-mono text-neutral-300">楼{tradeItem.price.toFixed(2)}</td>
                                          </tr>
                                      ))}
                                  </tbody>
@@ -795,7 +850,7 @@ function App() {
                                      </div>
                                      <div className="flex justify-between items-center">
                                          <span className="text-white font-medium">{tradeItem.symbol}</span>
-                                         <span className="text-white font-mono">¥{tradeItem.price.toFixed(2)}</span>
+                                         <span className="text-white font-mono">楼{tradeItem.price.toFixed(2)}</span>
                                      </div>
                                  </div>
                              ))}
@@ -824,7 +879,7 @@ function App() {
                                  <div className="relative">
                                      <Search className="w-4 h-4 absolute left-3 top-2.5 text-neutral-500" />
                                      <input 
-                                        placeholder="按代码/名称首字母" 
+                                        placeholder="Search by symbol or name" 
                                         className="bg-black/20 border border-white/10 rounded-full pl-9 pr-4 py-1.5 text-sm text-white focus:outline-none focus:bg-black/40 w-32 md:w-auto" 
                                         value={marketSearch}
                                         onChange={(e) => { setMarketPage(1); setMarketSearch(e.target.value); }}
@@ -835,11 +890,10 @@ function App() {
                                         try {
                                             setMarketRefreshLoading(true);
                                             const resp = await triggerBackendRefresh();
-                                            addLog('SYSTEM', `已强制后端抓取行情，total=${resp.total || 0}`);
-                                            alert('已触发后端抓取');
+                                            addLog('SYSTEM', `Forced backend refresh triggered, total=${resp.total || 0}`);
                                         } catch (e: any) {
                                             console.error(e);
-                                            alert('后端抓取失败，请检查服务');
+                                            addLog('ERROR', `Backend refresh failed: ${e?.message || ''}`);
                                         } finally {
                                             setMarketRefreshLoading(false);
                                         }
@@ -847,20 +901,20 @@ function App() {
                                     disabled={marketRefreshLoading}
                                     className="px-3 py-1.5 rounded-full border border-white/10 text-xs text-white hover:bg-white/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
                                  >
-                                    {marketRefreshLoading ? '抓取中...' : '强制后端抓取'}
+                                    {marketRefreshLoading ? 'Refreshing...' : 'Force Refresh'}
                                  </button>
                                  <div className="flex items-center gap-2 text-xs text-neutral-400">
                                     <button 
                                         disabled={marketPage <= 1}
                                         onClick={() => setMarketPage(p => Math.max(1, p - 1))}
                                         className="px-2 py-1 rounded border border-white/10 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
-                                    >上一页</button>
+                                    >&lt; Prev</button>
                                     <span className="text-neutral-300">{marketPage} / {totalPages}</span>
                                     <button 
                                         disabled={marketPage >= totalPages}
                                         onClick={() => setMarketPage(p => Math.min(totalPages, p + 1))}
                                         className="px-2 py-1 rounded border border-white/10 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
-                                    >下一页</button>
+                                    >Next &gt;</button>
                                  </div>
                              </div>
                         </div>
@@ -878,7 +932,7 @@ function App() {
                                     {pagedMarketData.map(m => (
                                         <tr key={m.symbol} className="hover:bg-white/5 transition-colors">
                                             <td className="py-4 px-6 font-medium text-white">{m.name} <span className="text-neutral-500 text-xs ml-2 font-normal">{m.symbol}</span></td>
-                                            <td className="py-4 px-6 text-right font-mono text-neutral-200">¥{m.price.toFixed(2)}</td>
+                                            <td className="py-4 px-6 text-right font-mono text-neutral-200">楼{m.price.toFixed(2)}</td>
                                             <td className={`py-4 px-6 text-right font-mono font-medium ${m.change >= 0 ? 'text-white' : 'text-neutral-500'}`}>
                                                 {m.change >= 0 ? '+' : ''}{m.change.toFixed(2)}%
                                             </td>
@@ -899,7 +953,7 @@ function App() {
                                             <div className="text-xs text-neutral-500">{m.symbol}</div>
                                         </div>
                                         <div className="text-right">
-                                            <div className="font-mono text-white">¥{m.price.toFixed(2)}</div>
+                                            <div className="font-mono text-white">楼{m.price.toFixed(2)}</div>
                                             <div className={`text-xs font-medium ${m.change >= 0 ? 'text-green-400' : 'text-neutral-500'}`}>
                                                 {m.change >= 0 ? '+' : ''}{m.change.toFixed(2)}%
                                             </div>
@@ -910,7 +964,7 @@ function App() {
                         </div>
                         {marketData.length === 0 && (
                             <div className="p-6 text-center text-neutral-500 text-sm">
-                                {marketSearch ? '未找到匹配的证券代码或名称' : '暂无行情数据'}
+                                {marketSearch ? 'No matching symbols or names' : 'No market data yet'}
                             </div>
                         )}
                     </div>
@@ -950,7 +1004,7 @@ function App() {
                                             </span>
                                         </td>
                                         <td className="py-4 text-neutral-300">{tradeItem.symbol}</td>
-                                        <td className="py-4 font-mono">¥{tradeItem.price.toFixed(2)}</td>
+                                        <td className="py-4 font-mono">楼{tradeItem.price.toFixed(2)}</td>
                                         <td className="py-4">
                                             <span className="text-xs border border-white/10 px-2 py-1 rounded bg-black/20 whitespace-nowrap text-neutral-300">
                                                 {tradeItem.strategyId}
@@ -973,7 +1027,7 @@ function App() {
                                  <div className="flex justify-between items-end mb-4">
                                      <div>
                                          <div className={`text-lg font-bold ${tradeItem.action === 'BUY' ? 'text-white' : 'text-neutral-500 line-through'}`}>{tradeItem.action} {tradeItem.symbol}</div>
-                                         <div className="text-sm text-neutral-400 font-mono">@ ¥{tradeItem.price.toFixed(2)}</div>
+                                         <div className="text-sm text-neutral-400 font-mono">@ 楼{tradeItem.price.toFixed(2)}</div>
                                      </div>
                                      <div className="text-right">
                                          <div className="text-xs uppercase tracking-wide text-neutral-500">{t('conf')}</div>
@@ -1019,3 +1073,6 @@ function App() {
 }
 
 export default App;
+
+
+

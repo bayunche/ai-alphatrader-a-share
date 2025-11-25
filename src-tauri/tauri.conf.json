@@ -1,7 +1,7 @@
 {
   "build": {
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "yarn build:server && yarn build",
+    "beforeBuildCommand": "yarn build:server && yarn build:akshare && yarn build",
     "devPath": "http://localhost:1420",
     "distDir": "../dist",
     "withGlobalTauri": true
@@ -52,11 +52,11 @@
       "targets": "all",
       "identifier": "com.alpha-trader.app",
       "externalBin": [
-        "bin/server"
+        "bin/server",
+        "bin/akshare_service"
       ],
       "icon": [
-        "icons/icon.ico",
-        "app-icon.png"
+        "icons/icon.ico"
       ],
       "resources": [
         "../assets/desktop_icon_rgba.png",
