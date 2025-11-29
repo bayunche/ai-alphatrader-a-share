@@ -3,6 +3,7 @@ import os
 import sqlite3
 import sys
 import unittest
+from datetime import datetime, timezone
 from unittest import mock
 
 import pandas as pd
@@ -167,6 +168,12 @@ class EastMoneyTestCase(unittest.TestCase):
         # 周末
         dt = eastmoney.datetime(2024, 1, 6, 10, 0)
         self.assertFalse(eastmoney.is_trading_time(dt))
+        # 不同系统时区：UTC 02:00 等价沪深 10:00，仍应视为交易时段
+        utc_morning = datetime(2024, 1, 3, 2, 0, tzinfo=timezone.utc)
+        self.assertTrue(eastmoney.is_trading_time(utc_morning))
+        # UTC 午休 04:00 等价沪深 12:00，应判定为非交易
+        utc_noon = datetime(2024, 1, 3, 4, 0, tzinfo=timezone.utc)
+        self.assertFalse(eastmoney.is_trading_time(utc_noon))
 
 
 if __name__ == "__main__":

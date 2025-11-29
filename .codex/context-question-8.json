@@ -1,0 +1,12 @@
+{
+  "question": "交易时段判定是否应强制使用沪深时区（Asia/Shanghai），以避免非本地时区导致的误判与额外请求？",
+  "why_this_matters": "当前前后端均基于系统本地时间判断交易时段；若环境时区为 UTC 等，可能在实际非交易时判定为交易中，触发持续轮询。",
+  "finding": {
+    "evidence": [
+      "App.tsx:isTradingTimeNow 使用 new Date() 获取本地时间，直接计算分钟，未指定 Asia/Shanghai。",
+      "server/eastmoney.py:is_trading_time 使用 datetime.now() 判定 09:30-11:30、13:00-15:00，依赖运行时时区。",
+      "用户反馈非交易时间仍有大量请求，符合时区误判导致轮询未停的现象。"
+    ],
+    "priority": "高：直接导致非交易时持续请求与资源浪费"
+  }
+}

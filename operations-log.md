@@ -58,9 +58,36 @@
 - 全局错误提示：监听 window error/unhandledrejection，弹窗提示后端/外部接口错误并写入控制台。
 - 数据库自愈：内置 users/workspaces schema，schema.sql 为空或缺失时自动建表，避免 `no such table: workspaces`。
 
+## 2025-11-30T00:15:00+08:00
+- 使用 sequential-thinking 分析非交易时仍有大量请求的问题；更新 `.codex/context-scan.json`、`.codex/context-question-8.json`、`.codex/context-sufficiency.json` 记录时区误判风险。
+- 前端 App.tsx：新增 `getShanghaiNow`，所有交易时段判定统一使用 Asia/Shanghai，避免宿主机时区为 UTC 等导致误判，保持非交易时仅首开拉取。
+- 后端 server/eastmoney.py：is_trading_time 固定沪深时区（timezone +8），防止侧车在 UTC 环境误判交易时段；补充中文注释。
+- 后端 server/index.js：为 /api/market 主表缓存增加沪深时区判断，非交易时段直接视为未过期，避免同一非交易窗口内频繁刷新并触发 akshare 回源。
+- 测试：为 is_trading_time 新增 UTC 入参覆盖的断言；尝试 `python3 server/test_eastmoney.py` 因环境缺少 pandas 依赖失败，待安装依赖后重跑。
+
+## 2025-11-30T00:35:00+08:00
+- 使用 sequential-thinking 梳理大模型可用性检测缺口，新增 `.codex/context-question-9.json` 记录问题。
+- 更新 `services/healthService.ts`：按 provider 细分探活逻辑，OpenAI 要求带 API Key 校验 /v1/models 并验证指定模型；Gemini 校验模型列表和目标模型；Ollama 校验 /api/tags 中是否存在目标模型；缺少模型名时直接判定不可用。
+- 代理健康 gating 继续复用 checkModelAvailability 结果，确保不可用模型无法启动。
+
+## 2025-11-30T00:40:00+08:00
+- 修复未登录提示重复：`App.tsx` 使用 unauthLoggedRef 只在首次检测到未登录时记录“未登录，先展示行情列表”，避免每轮轮询重复提示。
+
+## 2025-11-30T01:00:00+08:00
+- 梳理行情优先级：后端批量行情与主表均改为优先 Akshare，失败再回退东财，随后英为，最后静态 SSE/SZ，符合“先 Akshare 再东财”的预期。
 - 东财抓取增强：去除代理，优先 https://push2 / http://80.push2 / http://64.push2，记录 total 并按总数/页大小提前停止；默认 pageSize 提升至 1000。
 
 - 东财请求增加 UA/Referer，默认最多翻 100 页、每页 200 条（可配置），提高 total 正确性。
+
+## 2025-11-30T01:05:00+08:00
+- 默认 Akshare 地址：server/index.js 增加 AKSHARE_BASE 默认值 http://127.0.0.1:5001，并在启动时提示“先启动 akshare，再启动后端，再启动前端”。
+- README 快速开始补充启动顺序（Akshare → 后端 → 前端），避免启动顺序错误导致行情回退。
+
+## 2025-11-30T01:15:00+08:00
+- 前端数据源强制依赖后端：移除前端回退窗口，`services/marketService.ts` 在 FORCE_BACKEND=true 时后端失败直接抛错，不再自动回退东财/英为，确保前端必须依赖后端（后端内部已按 Akshare→东财→英为 顺序兜底）。
+
+## 2025-11-30T01:20:00+08:00
+- 调整 Tauri sidecar 启动顺序：`src-tauri/src/main.rs` 先启动 akshare_service，再启动后端 server，确保打包应用遵循“先 akshare 再后端再前端”的顺序。
 
 - 东财请求增加 UA/Referer，默认最多翻 100 页、每页 200 条（可配置），提升 total 正确性。
 

@@ -116,6 +116,7 @@ const fetchBackendMarketData = async (page: number, pageSize: number, keyword: s
     } catch (e) {
         console.warn('Backend market fetch failed, fallback to direct source', e);
         if (FORCE_BACKEND) {
+            // 强制依赖后端时直接抛出，交由上层提示问题
             throw e;
         }
     }

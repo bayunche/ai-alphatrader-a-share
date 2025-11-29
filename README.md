@@ -24,7 +24,7 @@ types.ts                # 共享类型定义
 
 ## 快速开始
 1) 安装依赖：`npm install`  
-2) 开发模式：`npm run dev`（前端），可选 `cd server && npm start` 启动后端缓存接口  
+2) 启动顺序：先启动 Akshare 微服务（`python3 server/akshare_service.py --port 5001`，或打包后的 sidecar），再启动后端 `node server/index.js`（或 Tauri sidecar），最后启动前端 `npm run dev`（前端行情强制依赖后端）。  
 3) 配置智能体：在「设置-智能体」中为每个 Agent 选择 Provider（Gemini/OpenAI 兼容/Ollama），填写接口地址/Key，点击“检查智能体可用性”确认通过后再启动。  
 4) 切换交易模式：默认 Sandbox（本地模拟）；如需真实券商，请在「资金管理」或设置中提供券商 endpoint，确保 `/health` 可访问后切到 Real。  
 5) 行情抓取（可选）：安装 Python 依赖后运行 `python3 server/eastmoney.py`，初始化主表/日线数据。  

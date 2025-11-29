@@ -6,6 +6,9 @@ const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
 
+// Akshare 服务地址，默认为本机 5001 端口，需先启动 akshare_service.py
+const AKSHARE_BASE = process.env.AKSHARE_BASE || 'http://127.0.0.1:5001';
+
 const app = express();
 const PORT = process.env.PORT || 38211;
 
@@ -19,6 +22,18 @@ const respondError = (res, err, status = 500, context = 'error') => {
   const message = err?.message || 'unknown error';
   console.error(`[${context}]`, err);
   return res.status(status).json({ success: false, error: message });
+};
+
+// 使用沪深时区计算当前时间，避免宿主机时区（如 UTC）导致交易时段误判
+const getShanghaiNow = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+const isTradingTimeShanghai = () => {
+  const now = getShanghaiNow();
+  const day = now.getDay();
+  if (day === 0 || day === 6) return false;
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const morning = minutes >= (9 * 60 + 30) && minutes < (11 * 60 + 30);
+  const afternoon = minutes >= (13 * 60) && minutes < (15 * 60);
+  return morning || afternoon;
 };
 
 app.use(cors());
@@ -159,6 +174,8 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception', err);
 });
+
+console.log(`[akshare] base = ${AKSHARE_BASE}（请先启动 akshare_service.py，再启动后端，再启动前端）`);
 
 const marketCache = {
   data: [],
@@ -307,7 +324,7 @@ const fetchYingweiQuotes = async (symbols = []) => {
 };
 
 const fetchAkshareQuotes = async (symbols = []) => {
-  const base = process.env.AKSHARE_BASE;
+  const base = AKSHARE_BASE;
   if (!base || !symbols.length) return [];
   const normalized = base.replace(/\/$/, '');
   const url = new URL(`${normalized}/quotes`);
@@ -331,7 +348,7 @@ const fetchAkshareQuotes = async (symbols = []) => {
 };
 
 const fetchAkshareMaster = async () => {
-  const base = process.env.AKSHARE_BASE;
+  const base = AKSHARE_BASE;
   if (!base) return [];
   const normalized = base.replace(/\/$/, '');
   const url = `${normalized}/master`;
@@ -443,8 +460,15 @@ const fetchQuotesBatch = async (symbols = []) => {
 
   const results = new Map();
 
-  // 1) EastMoney per symbol (reliable字段较全)
-  for (const sym of unique) {
+  // 1) Akshare 优先批量获取
+  try {
+    const akQuotes = await fetchAkshareQuotes(unique);
+    akQuotes.forEach((q) => results.set(q.symbol, q));
+  } catch (e) {}
+
+  // 2) EastMoney 补齐缺失
+  const missing1 = unique.filter((s) => !results.has(s));
+  for (const sym of missing1) {
     try {
       const q = await fetchEastMoneyQuote(sym);
       if (q) results.set(sym, q);
@@ -453,20 +477,11 @@ const fetchQuotesBatch = async (symbols = []) => {
     }
   }
 
-  // 2) Yingwei batch for missing
-  const missing1 = unique.filter((s) => !results.has(s));
-  if (missing1.length) {
-    try {
-      const qs = await fetchYingweiQuotes(missing1);
-      qs.forEach((q) => results.set(q.symbol, q));
-    } catch (e) {}
-  }
-
-  // 3) Akshare service for remaining
+  // 3) Yingwei 批量兜底
   const missing2 = unique.filter((s) => !results.has(s));
   if (missing2.length) {
     try {
-      const qs = await fetchAkshareQuotes(missing2);
+      const qs = await fetchYingweiQuotes(missing2);
       qs.forEach((q) => results.set(q.symbol, q));
     } catch (e) {}
   }
@@ -527,7 +542,10 @@ const MASTER_TTL_MS = parseInt(process.env.MASTER_TTL_MS || `${12 * 60 * 60 * 10
 const isExpired = (ts) => {
   if (!ts) return true;
   const t = new Date(ts).getTime();
-  return Number.isNaN(t) || Date.now() - t > MASTER_TTL_MS;
+  if (Number.isNaN(t)) return true;
+  // 非交易时段直接视为未过期，避免频繁向远程/akshare 刷新主表
+  if (!isTradingTimeShanghai()) return false;
+  return Date.now() - t > MASTER_TTL_MS;
 };
 
 const saveMasterToDb = (rows, lastUpdated) =>
@@ -648,39 +666,41 @@ const fetchAndPersistMaster = async () => {
   const combined = [];
   let targetTotal = null;
 
-  // 先尝试东财 clist，失败再尝试英为财经
-  let eastmoneyOk = false;
+  // 先尝试 Akshare 主表
+  let akOk = false;
   try {
-    for (let i = 1; i <= MAX_PAGES; i++) {
-      const { data, total } = await fetchEastMoneyPage(i, PAGE_SIZE);
-      combined.push(...data);
-      if (targetTotal === null) targetTotal = total;
-      if (data.length < PAGE_SIZE || (targetTotal && combined.length >= targetTotal)) break;
+    const akData = await fetchAkshareMaster();
+    if (akData.length > 0) {
+      combined.push(...akData);
+      targetTotal = akData.length;
+      akOk = true;
     }
-    eastmoneyOk = combined.length > 0;
   } catch (e) {
-    console.warn('fetch eastmoney failed', e.message);
+    console.warn('fetch akshare master failed', e.message);
   }
 
-  if (!eastmoneyOk) {
+  // Akshare 失败时尝试东财 clist
+  if (!akOk) {
+    try {
+      for (let i = 1; i <= MAX_PAGES; i++) {
+        const { data, total } = await fetchEastMoneyPage(i, PAGE_SIZE);
+        combined.push(...data);
+        if (targetTotal === null) targetTotal = total;
+        if (data.length < PAGE_SIZE || (targetTotal && combined.length >= targetTotal)) break;
+      }
+    } catch (e) {
+      console.warn('fetch eastmoney failed', e.message);
+    }
+  }
+
+  // 东财也失败时再尝试英为
+  if (combined.length === 0) {
     try {
       const ywData = await fetchYingweiPage(1, PAGE_SIZE, '');
       combined.push(...ywData);
       targetTotal = ywData.length;
     } catch (e) {
       console.warn('fetch yingwei failed', e.message);
-    }
-  }
-
-  if (combined.length === 0) {
-    try {
-      const akData = await fetchAkshareMaster();
-      if (akData.length > 0) {
-        combined.push(...akData);
-        targetTotal = akData.length;
-      }
-    } catch (e) {
-      console.warn('fetch akshare master failed', e.message);
     }
   }
 

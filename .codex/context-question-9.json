@@ -1,0 +1,11 @@
+{
+  "question": "大模型 API 可用性检查需要按不同 provider 定制校验，例如 OpenAI/Gemini/Ollama 分别验证模型列表/具体模型是否可访问，未通过不允许启用智能体。",
+  "why_this_matters": "当前 checkModelAvailability 只做简单请求，未校验模型是否存在，可能允许无效配置进入交易流程，导致运行时反复报错或频繁重试。",
+  "finding": {
+    "evidence": [
+      "services/healthService.ts: checkModelAvailability 仅按 provider 区分到三个函数，其中 OpenAI 只访问 /v1/models，未校验 modelName；Ollama 仅访问 /api/tags，不检查指定模型；Gemini 也未验证具体模型。",
+      "App.tsx 启动前以 agentHealth gate 控制运行，但当前健康结果可能误判为可用。"
+    ],
+    "priority": "高：防止无效大模型配置导致交易流程反复失败"
+  }
+}

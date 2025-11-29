@@ -90,6 +90,33 @@ fn main() {
             envs.insert("PORT".to_string(), "38211".to_string());
             envs.insert("AKSHARE_BASE".to_string(), "http://127.0.0.1:18118".to_string());
 
+            // 先启动 akshare sidecar，再启动后端，确保后端能连接 akshare
+            let ak_started = match Command::new_sidecar("akshare_service") {
+                Ok(cmd) => {
+                    match cmd
+                        .envs(HashMap::from([("AK_PORT".to_string(), "18118".to_string())]))
+                        .spawn()
+                    {
+                        Ok((_rx2, ak_child)) => {
+                            ak_state.set_child(ak_child);
+                            true
+                        }
+                        Err(e) => {
+                            eprintln!("failed to spawn akshare sidecar: {e}");
+                            false
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("akshare sidecar setup failed: {e}");
+                    false
+                }
+            };
+
+            if !ak_started {
+                eprintln!("warning: akshare sidecar not running, backend may fallback to other sources");
+            }
+
             let (_rx, child) = Command::new_sidecar("server")
                 .map_err(|e| format!("failed to setup sidecar: {e}"))?
                 .envs(envs)
@@ -97,20 +124,6 @@ fn main() {
                 .map_err(|e| format!("failed to spawn sidecar: {e}"))?;
 
             state.set_child(child);
-
-            // 启动 akshare sidecar，如失败不影响主流程
-            match Command::new_sidecar("akshare_service") {
-                Ok(cmd) => {
-                    let (_rx2, ak_child) = cmd
-                        .envs(HashMap::from([("AK_PORT".to_string(), "18118".to_string())]))
-                        .spawn()
-                        .map_err(|e| format!("failed to spawn akshare sidecar: {e}"))?;
-                    ak_state.set_child(ak_child);
-                }
-                Err(e) => {
-                    eprintln!("akshare sidecar setup failed: {e}");
-                }
-            }
             Ok(())
         })
         .build(tauri::generate_context!())

@@ -11,3 +11,5 @@
 - Backend sidecar: integrated `pkg` packaging (`yarn build:server` → `src-tauri/bin/server.exe`), Tauri `beforeBuildCommand` now runs server build and registers externalBin; Rust `main.rs` spawns/kills sidecar. Not yet tested in this environment due to rollup optional dependency and pkg build pending on Windows.
 - No automated test suites present; trading logic/services/Tauri wrapper remain untested.
 - Python 抓取脚本：新增 `server/eastmoney.py` 及 `server/test_eastmoney.py`，但在本环境运行 `python3 server/test_eastmoney.py` 失败，原因是缺少 pandas 依赖；需安装 pandas/requests 后再执行测试。
+- 2025-11-30 时区修正：再次尝试 `python3 server/test_eastmoney.py` 仍因缺少 pandas 无法运行；需先安装依赖后验证 is_trading_time 的时区逻辑调整。
+- 2025-11-30 模型探活：未新增自动化测试，仅更新模型可用性探活逻辑；需人工验证不同 provider 配置时的健康标签与启动拦截。

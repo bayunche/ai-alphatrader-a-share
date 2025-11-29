@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, List
 
 import pandas as pd
@@ -31,6 +31,9 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36",
     "Referer": "https://quote.eastmoney.com/",
 }
+
+# 固定沪深时区，避免服务器时区变化导致交易时段误判
+SH_TZ = timezone(timedelta(hours=8))
 
 
 def code_to_secid(code: str) -> str:
@@ -378,11 +381,17 @@ def is_trading_time(now: datetime | None = None) -> bool:
     判断当前是否处于 A 股交易时段（工作日 09:30-11:30、13:00-15:00）。
     非交易时段用于跳过实时价格刷新，但仍可拉取基础主表。
     """
-    now = now or datetime.now()
+    # 固定到沪深时区，避免服务器时区为 UTC 等导致误判
+    base = now or datetime.now(tz=SH_TZ)
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=SH_TZ)
+    else:
+        base = base.astimezone(SH_TZ)
+
     # 周一=0 ... 周日=6，周末不交易
-    if now.weekday() >= 5:
+    if base.weekday() >= 5:
         return False
-    hhmm = now.strftime("%H%M")
+    hhmm = base.strftime("%H%M")
     return ("0930" <= hhmm <= "1130") or ("1300" <= hhmm <= "1500")
 
 

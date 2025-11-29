@@ -26,3 +26,5 @@
 - 命令：`python3 server/test_eastmoney.py`
 - 结果：失败
 - 输出摘要：环境缺少 pandas 依赖（ModuleNotFoundError: No module named 'pandas'），未能执行单元测试；需先安装 pandas/requests 再重试。
+- 2025-11-30 非交易时段时区修正：重新尝试 `python3 server/test_eastmoney.py`，结果失败，原因同样为缺少 pandas 依赖；待安装依赖后复测。
+- 2025-11-30 模型探活增强：未新增或执行测试命令（仅更新前端健康探活逻辑）；建议安装 pandas/requests 后补跑 `python3 server/test_eastmoney.py`。

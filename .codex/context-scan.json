@@ -2,35 +2,39 @@
   "location": {
     "module": "App.tsx",
     "related": [
-      "services/marketService.ts"
+      "services/marketService.ts",
+      "server/eastmoney.py"
     ],
-    "context": "前端主应用组件，负责交易时段判断、行情拉取、持仓补价与搜索逻辑"
+    "context": "前端主应用组件负责交易时段判断、行情拉取、持仓补价与搜索；后端 eastmoney.py 也有交易时段判定用于跳过非交易刷新。"
   },
   "current_state": {
     "loops": {
-      "main": "useEffect 设置 setInterval 每 60s + 首次 2s 调用 runTradingCycle；行情成功后恢复，失败时标记 marketHealthy=false 并暂停交易逻辑；非交易时同一关键字仅首开拉一次",
-      "light_refresh": "marketData 变更后每 15-30s 拉取当前页前 10 只的批量报价，非交易或行情异常时跳过",
-      "pool_cycle": "池内快速刷新非交易时跳过；行情异常时暂停，恢复后继续"
+      "main": "useEffect 设置 setInterval 每 60s + 首次 2s 调用 runTradingCycle；非交易时同一关键字仅首开拉一次；进入交易时段重置快照标记。",
+      "light_refresh": "marketData 变更后每 15-30s 拉取当前页前 10 只的批量报价，isTradingTimeNow 与 marketHealthy 为前置条件。",
+      "pool_cycle": "池内快速刷新在非交易或行情异常时跳过，正常时 15-30s 随机刷新。"
     },
     "health": {
-      "agent": "新增 checkModelAvailability，支持 Gemini/OpenAI 兼容/Ollama，可在设置页显示可用/不可用标签并手动触发检查，启动前若不可用会拦截",
-      "broker": "新增 brokerHealth（/health 探活，用户手动配置 endpoint），真实模式不可用时禁止启动",
-      "market": "marketHealthy/marketError 标记，行情失败会提示标签并暂停交易"
+      "agent": "checkModelAvailability 检查 Gemini/OpenAI/Ollama，可用性不满足时阻止启动。",
+      "broker": "checkBrokerAvailability 探活真实券商 /health，失败阻止真实模式启动。",
+      "market": "marketHealthy/marketError 标记，行情失败时暂停交易与 AI 分析。"
     },
-    "risk": "executeTradeForAgent 引入滑点、限价偏离、单次/单标的风险控制，行情异常时拒绝下单",
-    "trading_time_fn": "isTradingTimeNow 判断周末与 09:30-11:30、13:00-15:00"
+    "risk": "executeTradeForAgent 具备滑点、限价偏离、单次/单标的仓位上限，行情异常直接拒绝下单。",
+    "trading_time_fn": "isTradingTimeNow 仅基于本地时间的小时与分钟判断 09:30-11:30、13:00-15:00，未强制使用沪深时区。server/eastmoney.py 使用 datetime.now() 判定，亦依赖系统时区。"
   },
   "tech_stack": {
-    "frontend": "Vite + React + TypeScript",
-    "data_source": "services/marketService.ts 通过后端 /api/market、/quotes，或回退东财/英为",
-    "health": "services/healthService.ts 新增模型/券商可用性检查"
+    "frontend": "Vite + React + TypeScript（主逻辑在 App.tsx）",
+    "data_source": "services/marketService.ts 通过后端 /api/market、/quotes，后端市场缓存 12h 过期；失败回退东财/英为。",
+    "health": "services/healthService.ts 统一探活模型与券商。"
   },
   "tests": {
-    "current": "无前端自动化测试，现有行为需人工验证",
-    "notes": "未有针对交易时段逻辑的用例"
+    "current": "无前端自动化测试；server 有 eastmoney 判定单元测试。",
+    "notes": "未有针对前端交易时段判定的用例；后端判定依赖系统时区，可能与期望不符。"
   },
   "observation": {
-    "gaps": [],
-    "direction": "已按需求加入节流、健康检查、风控与行情异常暂停；后续可接入真实券商下单接口映射并完善 UI 提示"
+    "gaps": [
+      "交易时段判定依赖运行时所在时区，若系统时区非 Asia/Shanghai 会导致非交易时间仍判定为交易中，从而继续轮询。",
+      "后端 is_trading_time 同样未固定时区，可能与前端判定不一致。"
+    ],
+    "direction": "需要将交易时段判定统一固定到沪深时区，并确保非交易时快照节流生效。"
   }
 }
