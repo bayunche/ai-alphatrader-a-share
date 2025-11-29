@@ -1,40 +1,36 @@
 {
   "location": {
-    "module": "server/index.js",
+    "module": "App.tsx",
     "related": [
-      "server/schema.sql",
-      "package.json",
-      "src-tauri/tauri.conf.json"
+      "services/marketService.ts"
     ],
-    "context": "后端 Express + sqlite3，用作 Tauri sidecar；当前只包含用户/工作区表和行情缓存接口"
+    "context": "前端主应用组件，负责交易时段判断、行情拉取、持仓补价与搜索逻辑"
   },
   "current_state": {
-    "db": {
-      "path": "dataDir/database.sqlite（依赖 DATA_DIR 或应用目录）",
-      "schema": "内置 users/workspaces 表，schema.sql 为空；没有 a_stock_master / kline 相关表"
+    "loops": {
+      "main": "useEffect 设置 setInterval 每 60s + 首次 2s 调用 runTradingCycle；行情成功后恢复，失败时标记 marketHealthy=false 并暂停交易逻辑；非交易时同一关键字仅首开拉一次",
+      "light_refresh": "marketData 变更后每 15-30s 拉取当前页前 10 只的批量报价，非交易或行情异常时跳过",
+      "pool_cycle": "池内快速刷新非交易时跳过；行情异常时暂停，恢复后继续"
     },
-    "market_api": {
-      "eastmoney": "fetchEastMoneyPage 调用 push2 clist/get，多页抓取后缓存，字段映射为 symbol/name/price 等临时字段",
-      "fallback": "fetchYingweiPage 作为兜底，刷新价格 refreshPrices 也只调用英为财经",
-      "cache": "marketCache 持内存数据与 total，/api/market 提供分页与关键字过滤"
+    "health": {
+      "agent": "新增 checkModelAvailability，支持 Gemini/OpenAI 兼容/Ollama，可在设置页显示可用/不可用标签并手动触发检查，启动前若不可用会拦截",
+      "broker": "新增 brokerHealth（/health 探活，用户手动配置 endpoint），真实模式不可用时禁止启动",
+      "market": "marketHealthy/marketError 标记，行情失败会提示标签并暂停交易"
     },
-    "process": "server 启动即建库并加载 schema；无定时任务或单独脚本处理行情入库"
+    "risk": "executeTradeForAgent 引入滑点、限价偏离、单次/单标的风险控制，行情异常时拒绝下单",
+    "trading_time_fn": "isTradingTimeNow 判断周末与 09:30-11:30、13:00-15:00"
   },
   "tech_stack": {
-    "backend": "Node.js + Express + sqlite3 标准库驱动",
-    "client": "前端 React/Vite 通过 /api/market 读取缓存",
-    "db": "SQLite，本地文件，当前仅基础表"
+    "frontend": "Vite + React + TypeScript",
+    "data_source": "services/marketService.ts 通过后端 /api/market、/quotes，或回退东财/英为",
+    "health": "services/healthService.ts 新增模型/券商可用性检查"
   },
   "tests": {
-    "current": "仓库无自动化测试；server 未附带测试脚本",
-    "notes": "需要新增本地验证脚本覆盖行情抓取与 SQLite 落库"
+    "current": "无前端自动化测试，现有行为需人工验证",
+    "notes": "未有针对交易时段逻辑的用例"
   },
   "observation": {
-    "gaps": [
-      "缺少 A 股主表与实时行情入库逻辑，无法按要求只刷新价格字段",
-      "未定义 Python 抓取脚本和 SQLite 结构，需新增函数与建表流程",
-      "kline/get、stock/get 未在后端使用，secid 转换逻辑缺失"
-    ],
-    "direction": "新增 Python 脚本：全量抓取 clist/get 入库、实时逐只刷新价格、按 secid 拉取日线并 upsert；创建 a_stock_master 与 a_stock_kline_daily 表"
+    "gaps": [],
+    "direction": "已按需求加入节流、健康检查、风控与行情异常暂停；后续可接入真实券商下单接口映射并完善 UI 提示"
   }
 }

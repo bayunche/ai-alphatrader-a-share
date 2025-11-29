@@ -75,6 +75,7 @@ export interface TradingAgent {
   assignedPoolId?: string; // If set, agent only trades stocks in this pool
   config: AIConfig;
   portfolio: PortfolioState;
+  availabilityTag?: string; // 智能体可用性标记（不可用时显示原因或提示）
 }
 
 export interface BrokerConfig {
@@ -82,6 +83,8 @@ export interface BrokerConfig {
   brokerName: string;
   endpoint: string;
 }
+
+export type AgentHealthMap = Record<string, { ok: boolean; reason?: string }>;
 
 export interface NotificationConfig {
   enabled: boolean;

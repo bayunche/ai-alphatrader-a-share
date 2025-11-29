@@ -1,6 +1,6 @@
 {
-  "interface_clarity": "是：需要提供 Python 函数 fetch_a_stock_list、init_db、save_master_to_db、fetch_realtime_quote、refresh_realtime_quotes_in_db、fetch_kline_history、save_kline_to_db、main 示例，均基于东财 push2/push2his 接口和 SQLite 表结构。",
-  "tech_choice_rationale": "使用 requests/pandas + sqlite3（标准库）直接调用东财网页接口，遵循给定参数与字段映射；数据库使用本地 SQLite 文件 DB_PATH（可由环境变量覆盖以兼容现有 sidecar 数据目录）。",
-  "risks": "仓库缺少现成 Python 后端与依赖，需新增脚本与 requirements 说明；网络受限可能影响实时请求；需要确保价格字段 /100 处理与 secid 规则正确，避免数据错位；无现有自动化测试。",
-  "verification_strategy": "本地运行脚本 main：初始化表→全量拉取并入库→选取部分 code 刷新价格→获取示例 K 线并入库；检查 SQLite 表记录数与字段；如网络受限，记录失败原因于 verification.md。"
+  "interface_clarity": "是：已在 App.tsx 实现非交易节流（仅首开一次）、行情健康标记、AI/券商可用性检查和风险控制，交易时段自动恢复。",
+  "tech_choice_rationale": "前端使用 React + TypeScript，新增 healthService 统一探活；在主循环、轻量刷新、池刷新和交易执行中增加健康/风控标记；启动前检查智能体与券商可用性。",
+  "risks": "券商接口仍需用户自行配置并保证 /health 可用；真实下单链路未实现，只是前端风险控制与模拟；模型探活依赖各提供商的 /v1/models 或 tags 接口，网络受限时可能误判不可用。",
+  "verification_strategy": "静态检查：行情失败应显示标签并暂停交易；不可用智能体显示“不可用”tag 且无法启动；真实模式券商健康失败阻止启动；滑点/限价/头寸限制在交易执行中生效。用户自测无需自动化。"
 }

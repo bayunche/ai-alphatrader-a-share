@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { TradingAgent, AIProvider, StockPool, NotificationConfig } from '../types';
+import { TradingAgent, AIProvider, StockPool, NotificationConfig, AgentHealthMap } from '../types';
 import { Bot, Plus, Trash2, Save, ChevronRight, Layers, X, Bell, Send } from 'lucide-react';
 import { useTranslation } from '../contexts/LanguageContext';
 import { testNotification } from '../services/notificationService';
@@ -12,6 +12,8 @@ interface SettingsViewProps {
   setStockPools: React.Dispatch<React.SetStateAction<StockPool[]>>;
   notificationConfig: NotificationConfig;
   setNotificationConfig: React.Dispatch<React.SetStateAction<NotificationConfig>>;
+  agentHealth: AgentHealthMap;
+  onRefreshAgentHealth: () => void;
 }
 
 const PROVIDERS: AIProvider[] = ['GEMINI', 'OPENAI', 'OLLAMA'];
@@ -21,7 +23,7 @@ const AGENT_PALETTE = [
 ];
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ 
-    agents, setAgents, stockPools, setStockPools, notificationConfig, setNotificationConfig 
+    agents, setAgents, stockPools, setStockPools, notificationConfig, setNotificationConfig, agentHealth, onRefreshAgentHealth
 }) => {
   const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState<string | null>(null);
@@ -172,12 +174,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       {activeSection === 'agents' && (
         <>
-          <div className="flex justify-end mb-6">
+          <div className="flex justify-between items-center mb-6 gap-3">
              {!isEditing && (
                 <button onClick={startNewAgent} className="group flex items-center gap-2 bg-white text-black hover:bg-neutral-200 px-5 py-2.5 rounded-full font-medium transition-all shadow-lg shadow-white/10 active:scale-95">
                     <Plus className="w-4 h-4 transition-transform group-hover:rotate-90" /> {t('newAgent')}
                 </button>
             )}
+            <button
+              onClick={onRefreshAgentHealth}
+              className="text-xs px-3 py-2 rounded-full border border-white/10 text-neutral-300 hover:text-white hover:border-white/40 transition"
+            >
+              检查智能体可用性
+            </button>
           </div>
 
           {isEditing ? (
@@ -299,11 +307,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                                 </div>
                                 <div>
                                     <h3 className="font-semibold text-lg text-white">{agent.name}</h3>
-                                    <div className="flex gap-2 mt-1">
+                                    <div className="flex gap-2 mt-1 items-center flex-wrap">
                                         <span className="text-xs text-neutral-500 font-mono uppercase border border-white/10 px-1.5 rounded">{agent.config.provider}</span>
                                         {agent.assignedPoolId && (
                                             <span className="text-xs text-blue-400 font-mono uppercase border border-blue-500/30 px-1.5 rounded flex items-center gap-1">
                                                 <Layers className="w-3 h-3" /> Pool
+                                            </span>
+                                        )}
+                                        {agentHealth?.[agent.id] && !agentHealth[agent.id].ok && (
+                                            <span className="text-xs text-red-300 font-mono uppercase border border-red-400/40 px-1.5 rounded">
+                                                不可用
+                                            </span>
+                                        )}
+                                        {agentHealth?.[agent.id]?.ok && (
+                                            <span className="text-xs text-emerald-200 font-mono uppercase border border-emerald-300/30 px-1.5 rounded">
+                                                可用
                                             </span>
                                         )}
                                     </div>

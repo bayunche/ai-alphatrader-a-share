@@ -1,9 +1,8 @@
-﻿
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { 
   MarketData, TradeExecution, LogEntry, 
-  TradeAction, BrokerConfig, TradingAgent, StockPool, NotificationConfig, PortfolioState
+  TradeAction, BrokerConfig, TradingAgent, StockPool, NotificationConfig, PortfolioState, AgentHealthMap
 } from './types';
 import { fetchBatchQuotes, fetchMarketData, resetMarketService, triggerBackendRefresh, updateSpecificStocks } from './services/marketService';
 import { analyzeMarket } from './services/geminiService';
@@ -22,11 +21,12 @@ import { writeTextFile } from '@tauri-apps/api/fs';
 // @ts-ignore
 import { save } from '@tauri-apps/api/dialog';
 import { useTranslation } from './contexts/LanguageContext';
+import { checkModelAvailability, checkBrokerAvailability, HealthStatus } from './services/healthService';
 
 const isTradingTimeNow = () => {
   const now = new Date();
   const day = now.getDay();
-  if (day === 0 || day === 6) return false; // 鍛ㄦ湯浼戝競
+  if (day === 0 || day === 6) return false; // 周末休市，直接返回 false
   const minutes = now.getHours() * 60 + now.getMinutes();
   const morning = minutes >= (9 * 60 + 30) && minutes < (11 * 60 + 30);
   const afternoon = minutes >= (13 * 60) && minutes < (15 * 60);
@@ -49,13 +49,27 @@ function App() {
 
   // Chart View Filter: 'SYSTEM' or poolId
   const [chartView, setChartView] = useState<string>('SYSTEM');
+  const [agentHealth, setAgentHealth] = useState<AgentHealthMap>({});
+  const [marketHealthy, setMarketHealthy] = useState(true);
+  const [marketError, setMarketError] = useState<string>('');
+  const tradingSuspendedRef = useRef(false); // 行情异常时暂停 AI/交易
+  const riskConfigRef = useRef({
+    maxPositionPct: 60,      // 单标的最大持仓占总权益比例
+    maxOrderPct: 20,         // 单次下单最大现金比例
+    slippageBps: 10,         // 滑点（基点）
+    limitTolerancePct: 1.0   // 超过该偏离则放弃成交
+  });
+  const [brokerHealth, setBrokerHealth] = useState<HealthStatus>({ ok: true });
 
   // Keep a ref of agents to access latest state inside async intervals without triggering re-renders
   const agentsRef = useRef(agents);
   useEffect(() => {
     agentsRef.current = agents;
   }, [agents]);
-  
+  useEffect(() => {
+    evaluateAgentsHealth(agents);
+  }, [agents, evaluateAgentsHealth]);
+
   const globalRunningRef = useRef(globalRunning);
   useEffect(() => {
       globalRunningRef.current = globalRunning;
@@ -63,12 +77,39 @@ function App() {
   
   const notifyRef = useRef(notificationConfig);
   useEffect(() => { notifyRef.current = notificationConfig; }, [notificationConfig]);
+  const evaluateAgentsHealth = useCallback(async (list: TradingAgent[]) => {
+      if (!list || list.length === 0) {
+        setAgentHealth({});
+        return;
+      }
+      const result: AgentHealthMap = {};
+      for (const ag of list) {
+        try {
+          const status = await checkModelAvailability(ag.config);
+          result[ag.id] = status;
+        } catch (e: any) {
+          result[ag.id] = { ok: false, reason: e?.message || '检测失败' };
+        }
+      }
+      setAgentHealth(result);
+  }, []);
+
+  const checkBrokerHealth = useCallback(async (config: BrokerConfig) => {
+      if (config.mode !== 'real') {
+        setBrokerHealth({ ok: true });
+        return { ok: true };
+      }
+      const status = await checkBrokerAvailability(config);
+      setBrokerHealth(status);
+      return status;
+  }, []);
 
   const [brokerConfig, setBrokerConfig] = useState<BrokerConfig>({
     mode: 'sandbox',
     brokerName: 'Mock Securities',
     endpoint: 'https://api.mock-broker.com/v1'
   });
+  useEffect(() => { checkBrokerHealth(brokerConfig); }, [brokerConfig, checkBrokerHealth]);
 
   const [marketData, setMarketData] = useState<MarketData[]>([]);
   const [marketSearch, setMarketSearch] = useState('');
@@ -78,6 +119,8 @@ function App() {
   const [tradeHistory, setTradeHistory] = useState<TradeExecution[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const tradingWindowRef = useRef<boolean>(false);
+  const nonTradingSnapshotRef = useRef(false); // 非交易时段是否已做过一次拉取
+  const lastNonTradingKeywordRef = useRef<string>(''); // 非交易时段最后一次搜索关键字
 
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -123,15 +166,15 @@ function App() {
 
   }, [user]);
 
-  // 鍏ㄥ眬閿欒鎹曡幏锛氬寘鍚湭鎹曡幏寮傚父涓庢湭澶勭悊鐨?Promise 鎷掔粷锛堝閮ㄦ帴鍙?鍚庣绛夛級
+  // 全局错误捕获：包含未捕获异常与未处理的 Promise 拒绝（外部接口/后端等）
   useEffect(() => {
       const onError = (event: ErrorEvent) => {
           console.error('Global Error', event.error || event.message);
-          alert(`鍙戠敓閿欒锛?{event.message || '鏈煡閿欒'}`);
+          alert(`发生错误：${event.message || '未知错误'}`);
       };
       const onRejection = (event: PromiseRejectionEvent) => {
           console.error('Unhandled Rejection', event.reason);
-          alert(`璇锋眰澶辫触锛?{event.reason?.message || event.reason || '鏈煡鍘熷洜'}`);
+          alert(`请求失败：${event.reason?.message || event.reason || '未知原因'}`);
       };
       window.addEventListener('error', onError);
       window.addEventListener('unhandledrejection', onRejection);
@@ -190,7 +233,12 @@ function App() {
     confidence: number,
     strategyName: string
   ) => {
-    if (action === TradeAction.HOLD || quantityPct <= 0) return;
+    if (tradingSuspendedRef.current || !marketHealthy) {
+      addLog('SYSTEM', '行情异常，已暂停交易', agentId);
+      return;
+    }
+    if (action === TradeAction.HOLD || quantityPct <= 0 || price <= 0) return;
+    const risk = riskConfigRef.current;
 
     const timestamp = new Date().toISOString();
     let actualQuantity = 0;
@@ -214,15 +262,28 @@ function App() {
         let newCash = agent.portfolio.cash;
         let newPositions = [...agent.portfolio.positions];
         const agentName = agent.name;
+        const totalEquityNow = agent.portfolio.totalEquity || (agent.portfolio.cash + agent.portfolio.positions.reduce((acc, p) => acc + p.marketValue, 0));
+        const maxPositionValue = (totalEquityNow * risk.maxPositionPct) / 100;
+        const maxOrderValue = (totalEquityNow * risk.maxOrderPct) / 100;
+        const slippageFactor = action === TradeAction.BUY ? (1 + risk.slippageBps / 10000) : (1 - risk.slippageBps / 10000);
+        const execPrice = price * slippageFactor;
+        const driftPct = Math.abs(execPrice - price) / Math.max(price, 1e-6) * 100;
+        if (driftPct > risk.limitTolerancePct) {
+            addLog('TRADE', `滑点超限，放弃成交 ${symbol}`, agentId);
+            return agent;
+        }
 
         if (action === TradeAction.BUY) {
-            const amountToSpend = agent.portfolio.cash * (quantityPct / 100);
-            const rawQuantity = Math.floor(amountToSpend / price / 100) * 100;
+            const currentPosValue = newPositions.find(p => p.symbol === symbol)?.marketValue || 0;
+            const allowedValue = Math.max(0, Math.min(maxOrderValue, maxPositionValue - currentPosValue, newCash));
+            const targetValue = allowedValue * (quantityPct / 100);
+            const amountToSpend = Math.min(allowedValue, targetValue);
+            const rawQuantity = Math.floor(amountToSpend / execPrice / 100) * 100;
             
             if (rawQuantity < 100) return agent;
             
             actualQuantity = rawQuantity;
-            tradeAmount = actualQuantity * price;
+            tradeAmount = actualQuantity * execPrice;
             newCash -= tradeAmount;
 
             const existingPosIndex = newPositions.findIndex(p => p.symbol === symbol);
@@ -234,14 +295,14 @@ function App() {
                     ...pos,
                     quantity: totalQty,
                     averageCost: totalCost / totalQty,
-                    currentPrice: price,
-                    marketValue: totalQty * price,
-                    pnl: (price - (totalCost / totalQty)) * totalQty,
+                    currentPrice: execPrice,
+                    marketValue: totalQty * execPrice,
+                    pnl: (execPrice - (totalCost / totalQty)) * totalQty,
                     pnlPercentage: 0 
                 };
             } else {
                 newPositions.push({
-                    symbol, quantity: actualQuantity, averageCost: price, currentPrice: price,
+                    symbol, quantity: actualQuantity, averageCost: execPrice, currentPrice: execPrice,
                     marketValue: tradeAmount, pnl: 0, pnlPercentage: 0
                 });
             }
@@ -256,7 +317,7 @@ function App() {
             if (rawSellQty === 0) return agent;
 
             actualQuantity = rawSellQty;
-            tradeAmount = actualQuantity * price;
+            tradeAmount = actualQuantity * execPrice;
             newCash += tradeAmount;
 
             if (actualQuantity === pos.quantity) {
@@ -270,12 +331,12 @@ function App() {
             }
         }
 
-        const totalEquity = newCash + newPositions.reduce((acc, p) => acc + (p.quantity * price), 0);
+        const totalEquity = newCash + newPositions.reduce((acc, p) => acc + (p.marketValue || p.quantity * execPrice), 0);
         
         const newTrade: TradeExecution = {
             id: Math.random().toString(36).substr(2, 9),
             agentId: agent.id, agentName,
-            timestamp, symbol, action, price,
+            timestamp, symbol, action, price: execPrice,
             quantity: actualQuantity, totalAmount: tradeAmount,
             status, strategyId: strategyName, reason, confidence
         };
@@ -307,13 +368,18 @@ function App() {
 
   // -- Run Analysis Helper --
   const runAIAnalysis = useCallback((stocks: MarketData[], targetAgents: TradingAgent[]) => {
-        if (!globalRunningRef.current) return;
+        if (!globalRunningRef.current || tradingSuspendedRef.current || !marketHealthy) return;
         if (stocks.length === 0 || targetAgents.length === 0) return;
 
         stocks.forEach((stock, idx) => {
             setTimeout(() => {
                 targetAgents.forEach(agent => {
                     if (!agent.isRunning) return;
+                    const health = agentHealth[agent.id];
+                    if (health && !health.ok) {
+                        addLog('ERROR', `${agent.name} 模型不可用：${health.reason || ''}`, agent.id);
+                        return;
+                    }
                     
                     analyzeMarket(stock, agent.portfolio, agent.config, language).then(decision => {
                         if (decision.action !== TradeAction.HOLD) {
@@ -332,7 +398,7 @@ function App() {
                 });
             }, idx * 100);
         });
-  }, [language, executeTradeForAgent]);
+  }, [language, executeTradeForAgent, marketHealthy, agentHealth]);
 
   const [marketTotal, setMarketTotal] = useState(0);
   const totalPages = useMemo(() => Math.max(1, Math.ceil(marketTotal / pageSize)), [marketTotal]);
@@ -340,8 +406,10 @@ function App() {
   const totalPagesRef = useRef<number>(1);
   useEffect(() => { totalPagesRef.current = totalPages; }, [totalPages]);
 
-  // -- Light realtime refresh for褰撳墠椤碉紙姣?~15绉掞紝鎵归噺10鏉★級 --
+  // -- 当前页轻量刷新（约 15~30 秒，最多 10 只） --
   useEffect(() => {
+    if (!isTradingTimeNow()) return;
+    if (!marketHealthy) return;
     if (marketData.length === 0) return;
     let timeoutId: ReturnType<typeof setTimeout>;
     const run = async () => {
@@ -364,13 +432,14 @@ function App() {
     };
     run();
     return () => clearTimeout(timeoutId);
-  }, [marketData]);
+  }, [marketData, marketHealthy]);
 
 
   // -- Main Loop --
   useEffect(() => {
     const runTradingCycle = async () => {
         const isTrading = isTradingTimeNow();
+        const keyword = marketSearch.trim();
         if (!user) {
             addLog('SYSTEM', '未登录，先展示行情列表');
         }
@@ -382,15 +451,21 @@ function App() {
             addLog('SYSTEM', '当前非交易时段，暂停实时刷新，仅保留行情列表');
         } else if (isTrading && !tradingWindowRef.current) {
             tradingWindowRef.current = true;
+            nonTradingSnapshotRef.current = false;
+            lastNonTradingKeywordRef.current = '';
             addLog('SYSTEM', '进入交易时段，恢复实时刷新与分析');
         }
 
+        if (!isTrading && nonTradingSnapshotRef.current && lastNonTradingKeywordRef.current === keyword) {
+            return; // 非交易时段且已拉取过当前关键字，直接跳过
+        }
+
         try {
-            const resp = await fetchMarketData(marketPage, pageSize, marketSearch);
+            const resp = await fetchMarketData(marketPage, pageSize, keyword);
             let baseData = resp.data;
 
-            // 鎼滅储妯″紡涓嬩笉娣峰叆鎸佷粨锛屼繚鎸佸悗绔垎椤?鎼滅储缁撴灉绾噣
-            if (!marketSearch.trim()) {
+            // 搜索模式下不做持仓补齐，保持后端分页/搜索结果一致
+            if (!keyword) {
                 const holdingSymbols = Array.from(new Set(
                     agentsRef.current.flatMap(a => a.portfolio.positions.map(p => p.symbol))
                 ));
@@ -413,7 +488,7 @@ function App() {
             const criticalSymbols = new Set<string>(
               agentsRef.current.flatMap(a => a.portfolio.positions.map(p => p.symbol))
             );
-            if (criticalSymbols.size > 0) {
+            if (isTrading && criticalSymbols.size > 0) {
               try {
                 const quotes = await fetchBatchQuotes(Array.from(criticalSymbols).slice(0, 100));
                 if (quotes.length > 0) {
@@ -427,6 +502,9 @@ function App() {
             }
 
             setMarketData(baseData);
+            tradingSuspendedRef.current = false;
+            setMarketHealthy(true);
+            setMarketError('');
 
             const nowStr = new Date().toISOString();
 
@@ -460,6 +538,11 @@ function App() {
                 runAIAnalysis(tradeCandidates, marketWideAgents);
             }
 
+            if (!isTrading) {
+                nonTradingSnapshotRef.current = true;
+                lastNonTradingKeywordRef.current = keyword;
+            }
+
             // 模拟人工翻页：处理完当前页后再切到下一页，下一次轮询才会请求下一页
             const nextPage = marketPage >= totalPagesRef.current ? 1 : marketPage + 1;
             setMarketPage(nextPage);
@@ -467,6 +550,10 @@ function App() {
         } catch (err: any) {
             console.error("Trading Cycle Error:", err);
             addLog('ERROR', `Failed to fetch market data, will retry soon: ${err?.message || ''}`);
+            setMarketHealthy(false);
+            setMarketError(err?.message || '行情获取失败');
+            tradingSuspendedRef.current = true;
+            setGlobalRunning(false);
             setTimeout(runTradingCycle, 5000);
             return;
         }
@@ -490,13 +577,13 @@ function App() {
 
       let timeoutId: ReturnType<typeof setTimeout>;
 
-    const runPoolCycle = async () => {
-          if (!isTradingTimeNow()) {
+  const runPoolCycle = async () => {
+          if (!isTradingTimeNow() || tradingSuspendedRef.current || !marketHealthy) {
               timeoutId = setTimeout(runPoolCycle, 1000 * 60);
               return;
           }
           if (globalRunningRef.current && poolsRef.current.length > 0) {
-              // 姹囨€绘睜鍐呮爣鐨?+ 姹犲唴鏅鸿兘浣撶殑褰撳墠鎸佷粨锛岀‘淇濇寔浠撲环鏍兼洿鏂板苟鍙備笌鍒嗘瀽
+              // 池内标的与池内智能体持仓的当前价格补齐，确保刷新时参与分析
               const agentPositionsByPool: Record<string, Set<string>> = {};
               agentsRef.current.forEach(a => {
                   if (!a.assignedPoolId) return;
@@ -548,7 +635,7 @@ function App() {
 
       runPoolCycle();
       return () => clearTimeout(timeoutId);
-  }, [user, isDataLoaded, addLog, runAIAnalysis]); 
+  }, [user, isDataLoaded, addLog, runAIAnalysis, marketHealthy]); 
 
 
   // -- Chart Data Logic with Filtering --
@@ -605,6 +692,21 @@ function App() {
   };
 
   const toggleGlobalRun = () => {
+      if (!globalRunning) {
+          const unavailableAgents = agentsRef.current.filter(a => !agentHealth[a.id]?.ok);
+          if (unavailableAgents.length > 0) {
+              alert(`下列智能体不可用，请先修复：${unavailableAgents.map(a => a.name).join(', ')}`);
+              return;
+          }
+          if (!marketHealthy) {
+              alert(`行情异常：${marketError || '请先恢复行情数据'}`);
+              return;
+          }
+          if (brokerConfig.mode === 'real' && !brokerHealth.ok) {
+              alert(`券商接口不可用：${brokerHealth.reason || ''}`);
+              return;
+          }
+      }
       setGlobalRunning(!globalRunning);
       setAgents(prev => prev.map(a => ({ ...a, isRunning: !globalRunning })));
   };
@@ -867,15 +969,22 @@ function App() {
                     setStockPools={setStockPools} 
                     notificationConfig={notificationConfig}
                     setNotificationConfig={setNotificationConfig}
+                    agentHealth={agentHealth}
+                    onRefreshAgentHealth={() => evaluateAgentsHealth(agentsRef.current)}
                 />
             )}
             
             {activeTab === 'market' && (
                  <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 pb-20">
                     <div className="bg-white/5 backdrop-blur-xl border border-glass-border rounded-3xl overflow-hidden shadow-2xl">
-                         <div className="p-4 border-b border-white/5 flex justify-between items-center">
+                         <div className="p-4 border-b border-white/5 flex justify-between items-center flex-wrap gap-3">
                              <h3 className="text-white ml-2">{t('marketOverview')}</h3>
-                             <div className="flex items-center gap-3">
+                             <div className="flex items-center gap-3 flex-wrap">
+                                 {!marketHealthy && (
+                                    <span className="text-xs px-3 py-1 rounded-full border border-red-400/40 text-red-200 bg-red-500/10">
+                                      行情异常：{marketError || '等待恢复'}（已暂停交易）
+                                    </span>
+                                 )}
                                  <div className="relative">
                                      <Search className="w-4 h-4 absolute left-3 top-2.5 text-neutral-500" />
                                      <input 

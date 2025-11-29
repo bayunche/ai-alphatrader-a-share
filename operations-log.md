@@ -139,3 +139,26 @@
 ## 2025-11-24T03:45:00+08:00
 - 后端拉取链路同步前端回退：`fetchAndPersistMaster` 先尝试东财 clist（含 http://82.push2），失败时回退英为财经；若都失败则报错。
 - 前端东财拉取也加入 82 域名兜底，保持一致。
+
+## 2025-11-29T00:48:17+08:00
+- 使用 sequential-thinking 梳理乱码问题与疑问列表（thought 1-6），确定集中在 App.tsx 注释与弹窗文案。
+- 执行 `rg -n "鍛"`、`rg -n "閿"` 检索乱码位置；用 `python3` 脚本遍历非二进制文件检查 UTF-8 解码（未发现额外编码错误，初始 `python` 命令缺失已改为 python3）。
+- 更新 `.codex/context-scan.json`、`.codex/context-question-6.json`、`.codex/context-sufficiency.json` 记录乱码范围、原因假设与验证策略。
+- 通过 apply_patch 修复 App.tsx 中的乱码注释与 alert 文案（周末休市注释、全局错误/Promise 拒绝弹窗、搜索模式说明），同时去除文件开头 BOM。
+- 更新 `.codex/testing.md` 与 `verification.md` 说明本次为文本修复未新增测试命令；未执行新的构建/测试。
+
+## 2025-11-29T00:56:48+08:00
+- 使用 sequential-thinking 制定非交易时段节流方案（thought 1-5），更新 `.codex/context-scan.json`、`.codex/context-question-7.json`、`.codex/context-sufficiency.json` 记录现状与疑问。
+- 分析 App.tsx 轮询：主循环每 60s 调用 fetchMarketData，轻量刷新每 15-30s fetchBatchQuotes；非交易时缺少跳过标记。
+- 实施节流：新增 nonTradingSnapshotRef/lastNonTradingKeywordRef 标记，非交易时同一关键字仅首开拉取一次；进入交易时段重置标记；轻量刷新在非交易时直接跳过；关键报价补齐仅交易时执行。修复池内刷新注释乱码。
+- 更新 `.codex/testing.md` 与 `verification.md` 说明本次未新增测试/验证命令。
+
+## 2025-11-29T01:15:00+08:00
+- 根据“全托管自动交易”检查结果，新增健康与风控：引入 `services/healthService.ts` 对 Gemini/OpenAI 兼容/Ollama 以及券商 `/health` 探活；App.tsx 维护 agent/broker/market 健康状态，行情失败时标记暂停并提示。
+- 启动前校验：toggleGlobalRun 时若智能体不可用、行情异常或真实券商不可用则拦截；SettingsView 展示智能体可用/不可用标签，并提供手动“检查智能体可用性”按钮。
+- 行情告警：市场页顶部展示行情异常标签，marketHealthy=false 时暂停交易与 AI 分析；运行成功自动恢复标记。
+- 交易风控：executeTradeForAgent 增加滑点、限价偏离、单次/单标的仓位上限，行情异常时直接拒绝下单；持仓市值计算改用最新成交价。
+- 池刷新与轻量刷新在行情异常或非交易时跳过；真实券商模式自动探活，失败时保留 sandbox 不受影响。
+
+## 2025-11-29T01:30:00+08:00
+- 更新 README：补充健康检查/风控/行情暂停/非交易节流/真实券商需用户自配的信息，重新梳理快速开始、配置说明与已知限制，使其符合开源项目自描述。
