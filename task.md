@@ -1,0 +1,26 @@
+# AI 全流程自主交易与决策记录增强
+
+## 1. 方案设计 (Planning)
+- [x] 分析现有 `types.ts` 与 `App.tsx` 交易循环逻辑 <!-- id: 0 -->
+- [x] 制定决策记录的数据结构与存储方案 (`implementation_plan.md`) <!-- id: 1 -->
+
+## 2. 核心逻辑实现 (Implementation)
+- [x] **Schema 更新**: 修改 `types.ts`，新增 `DecisionRecord` 结构，扩展 `Workspace`。 <!-- id: 2 -->
+- [x] **逻辑增强**: 修改 `App.tsx` 中的 `runAIAnalysis` 与 `executeTradeForAgent`。
+    - [x] 捕获 `HOLD` 决策。
+    - [x] 将所有决策（含置信度、理由、策略名）写入新的决策记录表/数组。
+    - [x] 优化日志输出，避免 `HOLD` 刷屏，但确保数据库留痕。 <!-- id: 3 -->
+- [x] **持久化适配**: 确保新字段通过 `saveWorkspace` 正确存入后端 SQLite。 <!-- id: 4 -->
+
+## 3. 界面展示 (UI)
+- [x] **决策日志视图**: 在 UI (如 Logs 面板或独立面板) 增加“AI 思考”专属过滤器或视图。 <!-- id: 5 -->
+- [x] **持仓备注**: 在持仓列表中展示AI最近一次对该标的的看法 (Tip 或 详情列)。 <!-- id: 6 -->
+
+## 4. 验证与交付 (Verification & Testing)
+- [x] **功能验证**: 验证 `BUY`/`SELL`/`HOLD` 均有记录，且重启不丢失。 <!-- id: 7 -->
+- [x] **单元测试 (Unit Tests)**:
+    - [x] 配置 Vitest 测试环境。 <!-- id: 10 -->
+    - [x] 为 `geminiService.ts` 编写 Mock 测试。 <!-- id: 11 -->
+    - [x] 为 `marketService.ts` 编写 Mock 测试。 <!-- id: 12 -->
+- [x] **全流程验证**: 生成架构验证报告 `docs/architecture_validation.md`。 <!-- id: 13 -->
+- [x] 编写交付文档。 <!-- id: 9 -->

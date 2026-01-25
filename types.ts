@@ -140,3 +140,26 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
 }
+
+export interface AIDecisionRecord {
+  id: string;
+  agentId: string;
+  agentName: string;
+  symbol: string;
+  timestamp: string;
+  action: TradeAction;
+  reasoning: string;
+  confidence: number;
+  strategyName: string;
+  priceAtTime: number;
+}
+
+export interface Workspace {
+  agents: TradingAgent[];
+  tradeHistory: TradeExecution[];
+  logs: LogEntry[];
+  stockPools: StockPool[];
+  notificationConfig?: NotificationConfig;
+  lastUpdated: string;
+  decisionHistory?: AIDecisionRecord[];
+}

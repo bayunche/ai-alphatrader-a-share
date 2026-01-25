@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Sidebar } from './components/Sidebar';
 import {
     MarketData, TradeExecution, LogEntry,
-    TradeAction, BrokerConfig, TradingAgent, StockPool, NotificationConfig, PortfolioState, AgentHealthMap
+    TradeAction, BrokerConfig, TradingAgent, StockPool, NotificationConfig, PortfolioState, AgentHealthMap, AIDecisionRecord
 } from './types';
 import { fetchBatchQuotes, fetchMarketData, resetMarketService, triggerBackendRefresh, updateSpecificStocks } from './services/marketService';
 import { analyzeMarket } from './services/geminiService';
@@ -12,6 +12,7 @@ import { EquityChart, StockTrendChart } from './components/Charts';
 import { SettingsView } from './components/SettingsView';
 import { FundManagement } from './components/FundManagement';
 import { AuthView } from './components/AuthView';
+import { DecisionLogView } from './components/DecisionLogView';
 import { useAuth } from './contexts/AuthContext';
 import {
     Play, Pause, FileDown, Search, Zap, Menu, Eye
@@ -125,6 +126,7 @@ function App() {
     const pageSize = 50;
     const [tradeHistory, setTradeHistory] = useState<TradeExecution[]>([]);
     const [logs, setLogs] = useState<LogEntry[]>([]);
+    const [decisionHistory, setDecisionHistory] = useState<AIDecisionRecord[]>([]);
     const tradingWindowRef = useRef<boolean>(false);
     const nonTradingSnapshotRef = useRef(false); // 非交易时段是否已做过一次拉取
     const lastNonTradingKeywordRef = useRef<string>(''); // 非交易时段最后一次搜索关键字
@@ -150,6 +152,9 @@ function App() {
                 if (workspace.notificationConfig) {
                     setNotificationConfig(workspace.notificationConfig);
                 }
+                if (workspace.decisionHistory) {
+                    setDecisionHistory(workspace.decisionHistory);
+                }
             } else {
                 setAgents([{
                     id: 'default_1',
@@ -165,6 +170,7 @@ function App() {
                 setStockPools([]);
                 setTradeHistory([]);
                 setLogs([]);
+                setDecisionHistory([]);
                 setNotificationConfig({ enabled: false });
             }
             setIsDataLoaded(true);
@@ -202,12 +208,21 @@ function App() {
                 logs,
                 stockPools,
                 notificationConfig,
+                decisionHistory,
                 lastUpdated: new Date().toISOString()
             });
         }, 2000);
 
         return () => clearTimeout(timeout);
-    }, [agents, tradeHistory, logs, stockPools, notificationConfig, user, isDataLoaded]);
+    }, [agents, tradeHistory, logs, stockPools, notificationConfig, decisionHistory, user, isDataLoaded]);
+
+    const addDecision = useCallback((record: AIDecisionRecord) => {
+        setDecisionHistory(prev => {
+            // Keep last 1000 decisions to prevent memory bloat
+            const newState = [record, ...prev].slice(0, 1000);
+            return newState;
+        });
+    }, []);
 
 
     const addLog = useCallback((type: LogEntry['type'], message: string, agentId?: string, details?: any) => {
@@ -390,6 +405,21 @@ function App() {
                     }
 
                     analyzeMarket(stock, agent.portfolio, agent.config, language).then(decision => {
+                        // Record ALL decisions (BUY/SELL/HOLD)
+                        const record: AIDecisionRecord = {
+                            id: Math.random().toString(36).substr(2, 9),
+                            agentId: agent.id,
+                            agentName: agent.name,
+                            symbol: stock.symbol,
+                            timestamp: new Date().toISOString(),
+                            action: decision.action,
+                            reasoning: decision.reasoning,
+                            confidence: decision.confidence,
+                            strategyName: decision.strategyName,
+                            priceAtTime: stock.price
+                        };
+                        addDecision(record);
+
                         if (decision.action !== TradeAction.HOLD) {
                             executeTradeForAgent(
                                 agent.id,
@@ -406,7 +436,7 @@ function App() {
                 });
             }, idx * 100);
         });
-    }, [language, executeTradeForAgent, marketHealthy, agentHealth]);
+    }, [language, executeTradeForAgent, marketHealthy, agentHealth, addDecision]);
 
     const [marketTotal, setMarketTotal] = useState(0);
     const totalPages = useMemo(() => Math.max(1, Math.ceil(marketTotal / pageSize)), [marketTotal]);
@@ -788,6 +818,7 @@ function App() {
             case 'settings': return t('agentConfig');
             case 'market': return t('marketOverview');
             case 'history': return t('tradeJournal');
+            case 'thoughts': return 'AI 思考日志';
             case 'logs': return t('systemAudit');
             default: return '';
         }
@@ -833,8 +864,8 @@ function App() {
                         <button
                             onClick={toggleGlobalRun}
                             className={`flex items-center gap-2 px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold transition-all duration-300 shadow-lg text-xs md:text-sm ${globalRunning
-                                    ? 'bg-white text-black hover:bg-neutral-200 shadow-white/20'
-                                    : 'bg-neutral-800 text-white hover:bg-neutral-700 border border-white/10'
+                                ? 'bg-white text-black hover:bg-neutral-200 shadow-white/20'
+                                : 'bg-neutral-800 text-white hover:bg-neutral-700 border border-white/10'
                                 }`}
                         >
                             {globalRunning ? <Pause className="w-4 h-4 fill-black" /> : <Play className="w-4 h-4 fill-white" />}
@@ -934,8 +965,8 @@ function App() {
                                                     <td className="py-4 text-white font-medium">{tradeItem.agentName}</td>
                                                     <td className="py-4">
                                                         <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border ${tradeItem.action === 'BUY'
-                                                                ? 'bg-white text-black border-white'
-                                                                : 'bg-transparent text-neutral-500 border-neutral-700 line-through decoration-neutral-500'
+                                                            ? 'bg-white text-black border-white'
+                                                            : 'bg-transparent text-neutral-500 border-neutral-700 line-through decoration-neutral-500'
                                                             }`}>
                                                             {tradeItem.action}
                                                         </span>
@@ -1018,177 +1049,178 @@ function App() {
                                                 }
                                             }}
                                             disabled={marketRefreshLoading}
-                                            className="px-3 py-1.5 rounded-full border border-white/10 text-xs text-white hover:bg-white/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            {marketRefreshLoading ? 'Refreshing...' : 'Force Refresh'}
-                                        </button>
-                                        <div className="flex items-center gap-2 text-xs text-neutral-400">
-                                            <button
-                                                disabled={marketPage <= 1}
-                                                onClick={() => setMarketPage(p => Math.max(1, p - 1))}
-                                                className="px-2 py-1 rounded border border-white/10 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
-                                            >&lt; Prev</button>
-                                            <span className="text-neutral-300">{marketPage} / {totalPages}</span>
-                                            <button
-                                                disabled={marketPage >= totalPages}
-                                                onClick={() => setMarketPage(p => Math.min(totalPages, p + 1))}
-                                                className="px-2 py-1 rounded border border-white/10 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
-                                            >Next &gt;</button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="hidden md:block">
-                                    <table className="w-full text-left text-sm">
-                                        <thead className="text-xs font-bold text-neutral-500 uppercase tracking-wider bg-black/20">
-                                            <tr>
-                                                <th className="py-4 px-6">{t('symbol')}</th>
-                                                <th className="py-4 px-6 text-right">{t('price')}</th>
-                                                <th className="py-4 px-6 text-right">{t('change')}</th>
-                                                <th className="py-4 px-6 text-right">{t('trend')}</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-white/5">
-                                            {pagedMarketData.map(m => (
-                                                <tr key={m.symbol} className="hover:bg-white/5 transition-colors">
-                                                    <td className="py-4 px-6 font-medium text-white">{m.name} <span className="text-neutral-500 text-xs ml-2 font-normal">{m.symbol}</span></td>
-                                                    <td className="py-4 px-6 text-right font-mono text-neutral-200">楼{m.price.toFixed(2)}</td>
-                                                    <td className={`py-4 px-6 text-right font-mono font-medium ${m.change >= 0 ? 'text-white' : 'text-neutral-500'}`}>
-                                                        {m.change >= 0 ? '+' : ''}{m.change.toFixed(2)}%
-                                                    </td>
-                                                    <td className="py-4 px-6 flex justify-end">
-                                                        <StockTrendChart data={m.trend} isPositive={m.change >= 0} />
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div className="md:hidden divide-y divide-white/5">
-                                    {pagedMarketData.map(m => (
-                                        <div key={m.symbol} className="p-4">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <div className="font-medium text-white">{m.name}</div>
-                                                    <div className="text-xs text-neutral-500">{m.symbol}</div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="font-mono text-white">楼{m.price.toFixed(2)}</div>
-                                                    <div className={`text-xs font-medium ${m.change >= 0 ? 'text-green-400' : 'text-neutral-500'}`}>
-                                                        {m.change >= 0 ? '+' : ''}{m.change.toFixed(2)}%
+                        <div className="h-full overflow-hidden flex flex-col gap-4">
+                                            <div className="flex-1 bg-black/20 rounded-xl border border-white/5 overflow-hidden flex flex-col">
+                                                <h3 className="p-4 border-b border-white/5 font-medium text-lg flex items-center gap-2">
+                                                    <Search className="w-5 h-5 text-purple-400" />
+                                                    {t('marketData')}
+                                                    <div className="flex-1" />
+                                                    <button
+                                                        onClick={handleMarketRefresh}
+                                                        disabled={marketRefreshLoading}
+                                                        className="px-3 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 text-sm rounded-lg transition-colors disabled:opacity-50"
+                                                    >
+                                                        {marketRefreshLoading ? 'Syncing...' : 'Force Refresh'}
+                                                    </button>
+                                                </h3>
+
+                                                {/* Market Table */}
+                                                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                                    <table className="w-full text-left border-collapse">
+                                                        <thead className="sticky top-0 bg-neutral-900/95 backdrop-blur-sm z-10 text-xs uppercase text-neutral-500 font-medium">
+                                                            <tr>
+                                                                <th className="p-4 w-24">Symbol</th>
+                                                                <th className="p-4">Name</th>
+                                                                <th className="p-4 text-right">Price</th>
+                                                                <th className="p-4 text-right">Change</th>
+                                                                <th className="p-4 text-right">Volume</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="text-sm divide-y divide-white/5">
+                                                            {pagedMarketData.map(stock => (
+                                                                <tr key={stock.symbol} className="hover:bg-white/5 transition-colors group">
+                                                                    <td className="p-4 font-mono text-neutral-400 group-hover:text-purple-300 transition-colors">{stock.symbol}</td>
+                                                                    <td className="p-4 font-medium text-white">{stock.name}</td>
+                                                                    <td className="p-4 text-right font-mono text-white">¥{stock.price.toFixed(2)}</td>
+                                                                    <td className={`p-4 text-right font-mono font-bold ${stock.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                                        {stock.change > 0 ? '+' : ''}{stock.change.toFixed(2)}%
+                                                                    </td>
+                                                                    <td className="p-4 text-right font-mono text-neutral-500">{(stock.volume / 10000).toFixed(1)}w</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+
+                                                    {/* Pagination */}
+                                                    <div className="p-4 border-t border-white/5 flex items-center justify-between bg-black/20">
+                                                        <span className="text-sm text-neutral-500">
+                                                            Page {marketPage} of {totalPagesRef.current} (Total {marketTotal})
+                                                        </span>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                disabled={marketPage <= 1}
+                                                                onClick={() => setMarketPage(p => Math.max(1, p - 1))}
+                                                                className="px-3 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-sm disabled:opacity-50"
+                                                            >
+                                                                Prev
+                                                            </button>
+                                                            <button
+                                                                disabled={marketPage >= totalPagesRef.current}
+                                                                onClick={() => setMarketPage(p => p + 1)}
+                                                                className="px-3 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-sm disabled:opacity-50"
+                                                            >
+                                                                Next
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                                {marketData.length === 0 && (
-                                    <div className="p-6 text-center text-neutral-500 text-sm">
-                                        {marketSearch ? 'No matching symbols or names' : 'No market data yet'}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
                     )}
 
-                    {activeTab === 'history' && (
-                        <div className="max-w-7xl mx-auto bg-white/5 backdrop-blur-xl border border-glass-border rounded-3xl p-4 md:p-8 animate-in fade-in slide-in-from-bottom-4 shadow-2xl pb-20">
-                            <div className="flex justify-between items-center mb-8">
-                                <h2 className="text-2xl font-light text-white">{t('tradeJournal')}</h2>
-                                <button onClick={handleExportHistoryCSV} className="group flex items-center gap-2 bg-white text-black px-4 py-2 rounded-full text-sm font-medium hover:bg-neutral-200 transition-all">
-                                    <FileDown className="w-4 h-4" /> {t('exportData')}
-                                </button>
-                            </div>
-                            <div className="hidden md:block overflow-x-auto">
-                                <table className="w-full text-left text-sm text-neutral-400">
-                                    <thead className="text-xs font-bold text-neutral-500 uppercase tracking-wider border-b border-white/10">
-                                        <tr>
-                                            <th className="pb-4 pl-2">{t('time')}</th>
-                                            <th className="pb-4">{t('agent')}</th>
-                                            <th className="pb-4">{t('signal')}</th>
-                                            <th className="pb-4">{t('asset')}</th>
-                                            <th className="pb-4">{t('price')}</th>
-                                            <th className="pb-4">{t('strategy')}</th>
-                                            <th className="pb-4 w-1/3">{t('reasoning')}</th>
-                                            <th className="pb-4 text-right pr-2">{t('conf')}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-white/5">
-                                        {tradeHistory.map(tradeItem => (
-                                            <tr key={tradeItem.id} className="group hover:bg-white/5 transition-colors">
-                                                <td className="py-4 pl-2 font-mono text-xs">{tradeItem.timestamp.replace('T', ' ').split('.')[0]}</td>
-                                                <td className="py-4 text-white font-medium">{tradeItem.agentName}</td>
-                                                <td className="py-4">
-                                                    <span className={`font-bold ${tradeItem.action === 'BUY' ? 'text-white' : 'text-neutral-500 line-through'}`}>
-                                                        {tradeItem.action}
-                                                    </span>
-                                                </td>
-                                                <td className="py-4 text-neutral-300">{tradeItem.symbol}</td>
-                                                <td className="py-4 font-mono">楼{tradeItem.price.toFixed(2)}</td>
-                                                <td className="py-4">
-                                                    <span className="text-xs border border-white/10 px-2 py-1 rounded bg-black/20 whitespace-nowrap text-neutral-300">
-                                                        {tradeItem.strategyId}
-                                                    </span>
-                                                </td>
-                                                <td className="py-4 text-xs italic text-neutral-500 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">{tradeItem.reason}</td>
-                                                <td className="py-4 text-right pr-2 text-xs font-bold text-white">{(tradeItem.confidence * 100).toFixed(0)}%</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div className="md:hidden space-y-4">
-                                {tradeHistory.map(tradeItem => (
-                                    <div key={tradeItem.id} className="bg-white/5 rounded-2xl p-5 border border-white/5">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <span className="text-xs text-neutral-500">{tradeItem.timestamp.replace('T', ' ').split('.')[0]}</span>
-                                            <span className="text-xs font-medium text-neutral-300">{tradeItem.agentName}</span>
-                                        </div>
-                                        <div className="flex justify-between items-end mb-4">
-                                            <div>
-                                                <div className={`text-lg font-bold ${tradeItem.action === 'BUY' ? 'text-white' : 'text-neutral-500 line-through'}`}>{tradeItem.action} {tradeItem.symbol}</div>
-                                                <div className="text-sm text-neutral-400 font-mono">@ 楼{tradeItem.price.toFixed(2)}</div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="text-xs uppercase tracking-wide text-neutral-500">{t('conf')}</div>
-                                                <div className="text-white font-bold">{(tradeItem.confidence * 100).toFixed(0)}%</div>
-                                            </div>
-                                        </div>
-                                        <div className="bg-black/20 rounded-xl p-3 text-xs italic text-neutral-400 border border-white/5">
-                                            <span className="block font-bold not-italic text-neutral-300 mb-1">{tradeItem.strategyId}</span>
-                                            {tradeItem.reason}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                                        {activeTab === 'thoughts' && (
+                                            <DecisionLogView decisions={decisionHistory} />
+                                        )}
 
-                    {activeTab === 'logs' && (
-                        <div className="max-w-7xl mx-auto bg-black/40 backdrop-blur-xl border border-glass-border rounded-3xl p-4 md:p-6 h-[80vh] flex flex-col animate-in fade-in slide-in-from-bottom-4 shadow-2xl pb-20">
-                            <h2 className="text-xl font-medium mb-4 text-white ml-2">{t('systemOutput')}</h2>
-                            <div className="flex-1 overflow-auto bg-black/50 rounded-2xl p-4 md:p-6 font-mono text-xs space-y-1.5 shadow-inner border border-white/5">
-                                {logs.map(log => (
-                                    <div key={log.id} className="flex flex-col md:flex-row md:gap-4 border-b border-white/5 pb-1.5 hover:bg-white/5 px-2 rounded transition-colors">
-                                        <div className="flex gap-2 md:w-48 shrink-0">
-                                            <span className="text-neutral-600 select-none">{log.timestamp.split('T')[1]}</span>
-                                            <span className={`font-bold ${log.type === 'ERROR' ? 'text-white bg-red-900/50 px-1 rounded' :
-                                                    log.type === 'TRADE' ? 'text-white' :
-                                                        log.type === 'POOL' ? 'text-blue-400' :
-                                                            log.type === 'NOTIFY' ? 'text-purple-400' : 'text-neutral-500'
-                                                }`}>{log.type}</span>
-                                        </div>
-                                        <span className="text-neutral-300 break-all mt-1 md:mt-0">{log.message}</span>
+                                        {activeTab === 'history' && (
+                                            <div className="max-w-7xl mx-auto bg-white/5 backdrop-blur-xl border border-glass-border rounded-3xl p-4 md:p-8 animate-in fade-in slide-in-from-bottom-4 shadow-2xl pb-20">
+                                                <div className="flex justify-between items-center mb-8">
+                                                    <h2 className="text-2xl font-light text-white">{t('tradeJournal')}</h2>
+                                                    <button onClick={handleExportHistoryCSV} className="group flex items-center gap-2 bg-white text-black px-4 py-2 rounded-full text-sm font-medium hover:bg-neutral-200 transition-all">
+                                                        <FileDown className="w-4 h-4" /> {t('exportData')}
+                                                    </button>
+                                                </div>
+                                                <div className="hidden md:block overflow-x-auto">
+                                                    <table className="w-full text-left text-sm text-neutral-400">
+                                                        <thead className="text-xs font-bold text-neutral-500 uppercase tracking-wider border-b border-white/10">
+                                                            <tr>
+                                                                <th className="pb-4 pl-2">{t('time')}</th>
+                                                                <th className="pb-4">{t('agent')}</th>
+                                                                <th className="pb-4">{t('signal')}</th>
+                                                                <th className="pb-4">{t('asset')}</th>
+                                                                <th className="pb-4">{t('price')}</th>
+                                                                <th className="pb-4">{t('strategy')}</th>
+                                                                <th className="pb-4 w-1/3">{t('reasoning')}</th>
+                                                                <th className="pb-4 text-right pr-2">{t('conf')}</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-white/5">
+                                                            {tradeHistory.map(tradeItem => (
+                                                                <tr key={tradeItem.id} className="group hover:bg-white/5 transition-colors">
+                                                                    <td className="py-4 pl-2 font-mono text-xs">{tradeItem.timestamp.replace('T', ' ').split('.')[0]}</td>
+                                                                    <td className="py-4 text-white font-medium">{tradeItem.agentName}</td>
+                                                                    <td className="py-4">
+                                                                        <span className={`font-bold ${tradeItem.action === 'BUY' ? 'text-white' : 'text-neutral-500 line-through'}`}>
+                                                                            {tradeItem.action}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="py-4 text-neutral-300">{tradeItem.symbol}</td>
+                                                                    <td className="py-4 font-mono">楼{tradeItem.price.toFixed(2)}</td>
+                                                                    <td className="py-4">
+                                                                        <span className="text-xs border border-white/10 px-2 py-1 rounded bg-black/20 whitespace-nowrap text-neutral-300">
+                                                                            {tradeItem.strategyId}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="py-4 text-xs italic text-neutral-500 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">{tradeItem.reason}</td>
+                                                                    <td className="py-4 text-right pr-2 text-xs font-bold text-white">{(tradeItem.confidence * 100).toFixed(0)}%</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <div className="md:hidden space-y-4">
+                                                    {tradeHistory.map(tradeItem => (
+                                                        <div key={tradeItem.id} className="bg-white/5 rounded-2xl p-5 border border-white/5">
+                                                            <div className="flex justify-between items-center mb-3">
+                                                                <span className="text-xs text-neutral-500">{tradeItem.timestamp.replace('T', ' ').split('.')[0]}</span>
+                                                                <span className="text-xs font-medium text-neutral-300">{tradeItem.agentName}</span>
+                                                            </div>
+                                                            <div className="flex justify-between items-end mb-4">
+                                                                <div>
+                                                                    <div className={`text-lg font-bold ${tradeItem.action === 'BUY' ? 'text-white' : 'text-neutral-500 line-through'}`}>{tradeItem.action} {tradeItem.symbol}</div>
+                                                                    <div className="text-sm text-neutral-400 font-mono">@ 楼{tradeItem.price.toFixed(2)}</div>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <div className="text-xs uppercase tracking-wide text-neutral-500">{t('conf')}</div>
+                                                                    <div className="text-white font-bold">{(tradeItem.confidence * 100).toFixed(0)}%</div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="bg-black/20 rounded-xl p-3 text-xs italic text-neutral-400 border border-white/5">
+                                                                <span className="block font-bold not-italic text-neutral-300 mb-1">{tradeItem.strategyId}</span>
+                                                                {tradeItem.reason}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {activeTab === 'logs' && (
+                                            <div className="max-w-7xl mx-auto bg-black/40 backdrop-blur-xl border border-glass-border rounded-3xl p-4 md:p-6 h-[80vh] flex flex-col animate-in fade-in slide-in-from-bottom-4 shadow-2xl pb-20">
+                                                <h2 className="text-xl font-medium mb-4 text-white ml-2">{t('systemOutput')}</h2>
+                                                <div className="flex-1 overflow-auto bg-black/50 rounded-2xl p-4 md:p-6 font-mono text-xs space-y-1.5 shadow-inner border border-white/5">
+                                                    {logs.map(log => (
+                                                        <div key={log.id} className="flex flex-col md:flex-row md:gap-4 border-b border-white/5 pb-1.5 hover:bg-white/5 px-2 rounded transition-colors">
+                                                            <div className="flex gap-2 md:w-48 shrink-0">
+                                                                <span className="text-neutral-600 select-none">{log.timestamp.split('T')[1]}</span>
+                                                                <span className={`font-bold ${log.type === 'ERROR' ? 'text-white bg-red-900/50 px-1 rounded' :
+                                                                    log.type === 'TRADE' ? 'text-white' :
+                                                                        log.type === 'POOL' ? 'text-blue-400' :
+                                                                            log.type === 'NOTIFY' ? 'text-purple-400' : 'text-neutral-500'
+                                                                    }`}>{log.type}</span>
+                                                            </div>
+                                                            <span className="text-neutral-300 break-all mt-1 md:mt-0">{log.message}</span>
+                                                        </div>
+                                                    ))}
+                                                    <div ref={logsEndRef} />
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                ))}
-                                <div ref={logsEndRef} />
+                                </main>
                             </div>
-                        </div>
-                    )}
-                </div>
-            </main>
-        </div>
-    );
+                            );
 }
 
-export default App;
+                            export default App;
 
