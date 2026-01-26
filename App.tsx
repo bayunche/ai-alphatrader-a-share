@@ -445,17 +445,33 @@ function App() {
     useEffect(() => { totalPagesRef.current = totalPages; }, [totalPages]);
 
     // -- 当前页轻量刷新（约 15~30 秒，最多 10 只） --
+    // Use Ref to avoid infinite loop in polling effect
+    const marketDataRef = useRef(marketData);
+    useEffect(() => { marketDataRef.current = marketData; }, [marketData]);
+
+    // -- 当前页轻量刷新（约 15~30 秒，最多 10 只） --
     useEffect(() => {
-        if (!isTradingTimeNow()) return;
-        if (!marketHealthy) return;
-        if (marketData.length === 0) return;
         let timeoutId: ReturnType<typeof setTimeout>;
+        let mounted = true;
+
         const run = async () => {
-            const symbols = marketData.slice(0, 10).map(m => m.symbol);
-            if (symbols.length === 0) return;
+            if (!mounted) return;
+            // Check conditions inside the loop using refs/functions
+            if (!isTradingTimeNow() || !marketHealthy || marketDataRef.current.length === 0) {
+                // Retry slower if conditions not met
+                timeoutId = setTimeout(run, 10000);
+                return;
+            }
+
+            const symbols = marketDataRef.current.slice(0, 10).map(m => m.symbol);
+            if (symbols.length === 0) {
+                timeoutId = setTimeout(run, 10000);
+                return;
+            }
+
             try {
                 const quotes = await fetchBatchQuotes(symbols);
-                if (quotes.length > 0) {
+                if (mounted && quotes.length > 0) {
                     setMarketData(prev => {
                         const map = new Map(prev.map(i => [i.symbol, i]));
                         quotes.forEach(q => map.set(q.symbol, { ...map.get(q.symbol), ...q }));
@@ -465,12 +481,19 @@ function App() {
             } catch (e) {
                 console.warn('Light realtime refresh failed', e);
             }
-            const delay = Math.floor(Math.random() * 15000) + 15000; // 15~30s
-            timeoutId = setTimeout(run, delay);
+
+            if (mounted) {
+                const delay = Math.floor(Math.random() * 15000) + 15000; // 15~30s
+                timeoutId = setTimeout(run, delay);
+            }
         };
+
         run();
-        return () => clearTimeout(timeoutId);
-    }, [marketData, marketHealthy]);
+        return () => {
+            mounted = false;
+            clearTimeout(timeoutId);
+        };
+    }, [marketHealthy]);
 
 
     // -- Main Loop --
