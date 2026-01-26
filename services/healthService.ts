@@ -92,6 +92,9 @@ export const checkModelAvailability = async (config: AIConfig): Promise<HealthSt
 
 export const checkBrokerAvailability = async (config: BrokerConfig): Promise<HealthStatus> => {
   if (!config?.endpoint) return { ok: false, reason: '缺少券商接口地址' };
+  if (config.endpoint.includes('mock-broker.com')) {
+    return { ok: false, reason: '检测到示例地址，请配置真实券商接口' };
+  }
   try {
     const url = `${config.endpoint.replace(/\/+$/, '')}/health`;
     const res = await abortableFetch(url, { method: 'GET' });
