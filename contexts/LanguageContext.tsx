@@ -13,7 +13,7 @@ const translations = {
     settings: 'Settings',
     exportData: 'Export Data',
     subtitle: 'QUANTITATIVE AI SYSTEM',
-    
+
     // Header
     commandCenter: 'Command Center',
     agentConfig: 'Agent Configuration',
@@ -22,6 +22,8 @@ const translations = {
     systemAudit: 'System Audit',
     scanning: 'Scanning',
     liveConnection: 'Live Connection Established',
+    marketData: 'Market Data',
+    thoughts: 'AI Thoughts',
     simulationEnv: 'Simulation Environment',
     stopAll: 'Stop All',
     startAll: 'Start All',
@@ -82,7 +84,7 @@ const translations = {
     cancel: 'Cancel',
     active: 'Active',
     idle: 'Idle',
-    
+
     // Stock Pools
     stockPools: 'Stock Pools',
     managePools: 'Manage custom asset lists for focused trading.',
@@ -141,6 +143,8 @@ const translations = {
     systemAudit: '系统审计',
     scanning: '扫描中',
     liveConnection: '实盘连接已建立',
+    marketData: '实时行情',
+    thoughts: 'AI 思考',
     simulationEnv: '模拟沙盒环境',
     stopAll: '停止所有',
     startAll: '启动所有',
@@ -201,7 +205,7 @@ const translations = {
     cancel: '取消',
     active: '运行中',
     idle: '空闲',
-    
+
     // Stock Pools
     stockPools: '股票池管理',
     managePools: '管理自定义自选股列表以进行针对性交易。',

@@ -23,4 +23,5 @@
     - [x] 为 `geminiService.ts` 编写 Mock 测试。 <!-- id: 11 -->
     - [x] 为 `marketService.ts` 编写 Mock 测试。 <!-- id: 12 -->
 - [x] **全流程验证**: 生成架构验证报告 `docs/architecture_validation.md`。 <!-- id: 13 -->
-- [x] 编写交付文档。 <!-- id: 9 -->
+- [x] **发布准备**: 修复构建报错 (`App.tsx` JSX 错误, TS 类型错误)，确保 `yarn build` 通过。 <!-- id: 14 -->
+- [x] 编写交付文档 `docs/release_guide.md`。 <!-- id: 9 -->

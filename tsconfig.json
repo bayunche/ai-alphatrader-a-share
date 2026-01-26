@@ -30,6 +30,8 @@
   "exclude": [
     "node_modules",
     "dist",
-    "src-tauri/target"
+    "src-tauri/target",
+    "vitest.config.ts",
+    "**/*.test.ts"
   ]
 }
