@@ -24,4 +24,5 @@
     - [x] 为 `marketService.ts` 编写 Mock 测试。 <!-- id: 12 -->
 - [x] **全流程验证**: 生成架构验证报告 `docs/architecture_validation.md`。 <!-- id: 13 -->
 - [x] **发布准备**: 修复构建报错 (`App.tsx` JSX 错误, TS 类型错误)，确保 `yarn build` 通过。 <!-- id: 14 -->
+- [x] **运行时修复**: 修复前端 API 端口不匹配 (3001 vs 38211) 及 AI 模型地址拼接错误。 <!-- id: 15 -->
 - [x] 编写交付文档 `docs/release_guide.md`。 <!-- id: 9 -->

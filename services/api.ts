@@ -1,7 +1,7 @@
 
 import { User, Workspace, ApiResponse } from "../types";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:3001/api";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:38211/api";
 
 // Helper to check if backend is available (simple heuristic for this demo)
 let isBackendAvailable = false;
@@ -10,7 +10,7 @@ const checkBackend = async () => {
     try {
         // Try a health check or just assume true if a fetch succeeds
         // For simplicity, we'll just try to use it and fallback on error
-        isBackendAvailable = true; 
+        isBackendAvailable = true;
     } catch (e) {
         isBackendAvailable = false;
     }
@@ -41,22 +41,22 @@ export const authApi = {
 
     register: async (username: string): Promise<ApiResponse<User>> => {
         try {
-             const res = await fetch(`${API_BASE}/auth/register`, {
+            const res = await fetch(`${API_BASE}/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username })
             });
             return await res.json();
         } catch (e) {
-             // Fallback
-             console.warn("Backend unavailable, using LocalStorage for Register");
-             const usersStr = localStorage.getItem('alpha_trader_users');
-             const users: User[] = usersStr ? JSON.parse(usersStr) : [];
-             if (users.find(u => u.username === username)) return { success: false, error: 'User exists' };
-             
-             const newUser = { id: Math.random().toString(36).substr(2, 9), username };
-             localStorage.setItem('alpha_trader_users', JSON.stringify([...users, newUser]));
-             return { success: true, data: newUser };
+            // Fallback
+            console.warn("Backend unavailable, using LocalStorage for Register");
+            const usersStr = localStorage.getItem('alpha_trader_users');
+            const users: User[] = usersStr ? JSON.parse(usersStr) : [];
+            if (users.find(u => u.username === username)) return { success: false, error: 'User exists' };
+
+            const newUser = { id: Math.random().toString(36).substr(2, 9), username };
+            localStorage.setItem('alpha_trader_users', JSON.stringify([...users, newUser]));
+            return { success: true, data: newUser };
         }
     }
 };
@@ -76,7 +76,7 @@ export const dataApi = {
             const history = localStorage.getItem(`alpha_trader_${userId}_history`);
             const logs = localStorage.getItem(`alpha_trader_${userId}_logs`);
             const pools = localStorage.getItem(`alpha_trader_${userId}_pools`);
-            
+
             if (!agents) return null;
 
             return {

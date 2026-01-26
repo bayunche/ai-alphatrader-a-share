@@ -16,7 +16,7 @@ export type HealthStatus = { ok: boolean; reason?: string };
 const checkOpenAICompatible = async (endpoint: string, apiKey?: string, modelName?: string): Promise<HealthStatus> => {
   if (!endpoint) return { ok: false, reason: '缺少接口地址' };
   if (!apiKey) return { ok: false, reason: '缺少 API Key' };
-  const base = endpoint.replace(/\/+$/, '');
+  const base = endpoint.replace(/\/+$/, '').replace(/\/v1$/, '');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${apiKey}`
