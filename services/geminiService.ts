@@ -4,7 +4,20 @@ import { AIConfig, MarketData, PortfolioState, AIResponse, TradeAction } from ".
 
 // --- Shared Logic ---
 
-const SYSTEM_PROMPT = (marketData: MarketData, portfolio: PortfolioState, lang: 'en' | 'zh') => `
+import { KLineData } from "../types";
+
+const SYSTEM_PROMPT = (marketData: MarketData, portfolio: PortfolioState, lang: 'en' | 'zh', history: KLineData[] = []) => {
+  const currentPosition = portfolio.positions.find(p => p.symbol === marketData.symbol);
+  const cost = currentPosition?.averageCost || 0;
+  const pnlPct = currentPosition?.pnlPercentage || 0;
+  const exposurePct = portfolio.totalEquity > 0 ? ((currentPosition?.marketValue || 0) / portfolio.totalEquity * 100) : 0;
+
+  // Format History (Last 5 days)
+  const historyStr = history.slice(-5).map(h =>
+    `Date:${h.date} Close:${h.close} Vol:${(h.volume / 10000).toFixed(0)}w Pct:${h.change_pct}%`
+  ).join('\n');
+
+  return `
 ROLE: You are an Elite Autonomous A-Share Quantitative Trading Agent.
 OBJECTIVE: Maximize alpha (returns) while preserving capital. 
 RESPONSE FORMAT: JSON ONLY. No markdown, no commentary outside JSON.
@@ -13,17 +26,26 @@ LANGUAGE: Output the "reasoning" and "strategyName" fields in ${lang === 'zh' ? 
 CURRENT MARKET DATA (${marketData.name} - ${marketData.symbol}):
 - Price: ¥${marketData.price.toFixed(2)}
 - Change: ${marketData.change.toFixed(2)}%
+- Volume: ${(marketData.volume / 100).toFixed(0)} lots
 - Trend (Last 20 ticks): ${JSON.stringify(marketData.trend.map(t => Number(t.toFixed(2))))}
+
+RECENT HISTORY (Last 5 Days):
+${historyStr || "No history available"}
 
 PORTFOLIO STATUS:
 - Available Cash: ¥${portfolio.cash.toFixed(2)}
-- Current Position (${marketData.symbol}): ${portfolio.positions.find(p => p.symbol === marketData.symbol)?.quantity || 0} shares
+- Total Equity: ¥${portfolio.totalEquity.toFixed(2)}
+- Current Position (${marketData.symbol}): ${currentPosition?.quantity || 0} shares
+- Average Cost: ¥${cost.toFixed(2)}
+- Unrealized PnL: ${pnlPct.toFixed(2)}%
+- Asset Exposure: ${exposurePct.toFixed(1)}%
 
 TASK:
-1. Analyze volatility, trend, and volume.
-2. Formulate a SPECIFIC technical strategy name (e.g., "Bollinger Squeeze" or "布林带突破").
-3. Decide BUY, SELL, or HOLD.
-4. Suggested Quantity 0-100%.
+1. Analyze volatility, trend, volume, and history context.
+2. Consider portfolio risk (exposure, PnL state).
+3. Formulate a SPECIFIC technical strategy name (e.g., "Vol Breakout", "MA Rebound").
+4. Decide BUY, SELL, or HOLD.
+5. Suggested Quantity 0-100%.
 
 Output JSON Schema:
 {
@@ -35,6 +57,7 @@ Output JSON Schema:
   "reasoning": "string"
 }
 `;
+};
 
 // --- Gemini Provider ---
 
@@ -65,7 +88,7 @@ const geminiResponseSchema: Schema = {
 const fetchOpenAICompatible = async (config: AIConfig, prompt: string): Promise<AIResponse> => {
   const baseUrl = config.apiEndpoint.replace(/\/+$/, ""); // trim trailing slash
   const url = `${baseUrl}/v1/chat/completions`;
-  
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -96,11 +119,11 @@ const fetchOpenAICompatible = async (config: AIConfig, prompt: string): Promise<
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || "{}";
-    
+
     // Robust JSON parsing for models that might wrap in markdown
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     const jsonStr = jsonMatch ? jsonMatch[0] : content;
-    
+
     return JSON.parse(jsonStr);
 
   } catch (e) {
@@ -115,17 +138,18 @@ export const analyzeMarket = async (
   marketData: MarketData,
   portfolio: PortfolioState,
   config: AIConfig,
-  lang: 'en' | 'zh' = 'zh'
+  lang: 'en' | 'zh' = 'zh',
+  history: KLineData[] = []
 ): Promise<AIResponse> => {
-  
-  const prompt = SYSTEM_PROMPT(marketData, portfolio, lang);
+
+  const prompt = SYSTEM_PROMPT(marketData, portfolio, lang, history);
 
   try {
     if (config.provider === 'GEMINI') {
       const genAI = createGeminiClient(config.apiEndpoint, config.apiKey);
-      
+
       let modelId = config.modelName || 'gemini-2.5-flash';
-      
+
       const response = await genAI.models.generateContent({
         model: modelId,
         contents: prompt,
@@ -135,7 +159,7 @@ export const analyzeMarket = async (
           temperature: 0.7,
         }
       });
-      
+
       const text = response.text;
       if (!text) throw new Error("Empty Gemini response");
       return JSON.parse(text);

@@ -18,9 +18,16 @@
 
 ## 4. 验证与交付 (Verification & Testing)
 - [x] **功能验证**: 验证 `BUY`/`SELL`/`HOLD` 均有记录，且重启不丢失。 <!-- id: 7 -->
+- [x] Fix Infinite Polling Loop
+- [x] Add Positions Table to Dashboard
+- [/] **Plan AI Context Upgrade**
+    - [x] Create `docs/upgrade_plan.md` to document requirements (Cross-day, Volume, Portfolio Context).
+    - [x] Implement Backend History API (Phase 1)
+    - [x] Update AI Prompt with Cross-day/Volume/Portfolio Context (Phase 2)
 - [x] **单元测试 (Unit Tests)**:
     - [x] 配置 Vitest 测试环境。 <!-- id: 10 -->
     - [x] 为 `geminiService.ts` 编写 Mock 测试。 <!-- id: 11 -->
+    - [x] 为 `akshare_service.py` 编写 History API 测试。 <!-- id: 12 -->
     - [x] 为 `marketService.ts` 编写 Mock 测试。 <!-- id: 12 -->
 - [x] **全流程验证**: 生成架构验证报告 `docs/architecture_validation.md`。 <!-- id: 13 -->
 - [x] **发布准备**: 修复构建报错 (`App.tsx` JSX 错误, TS 类型错误)，确保 `yarn build` 通过。 <!-- id: 14 -->

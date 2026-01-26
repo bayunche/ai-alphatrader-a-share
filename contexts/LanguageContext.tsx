@@ -42,7 +42,9 @@ const translations = {
     // Charts & Cards
     performanceCurve: 'Performance Curve',
     equity: 'Equity',
-    positions: 'pos',
+    positions: 'Positions',
+    currentHoldings: 'Current Holdings',
+    noPositions: 'No active positions.',
     recentActivity: 'Recent Activity',
     waitingForData: 'Waiting for market data...',
     chartView: 'Chart View',
@@ -54,6 +56,7 @@ const translations = {
     agent: 'Agent',
     action: 'Action',
     symbol: 'Symbol',
+    quantity: 'Qty',
     strategy: 'Strategy',
     price: 'Price',
     change: 'Change',
@@ -108,6 +111,21 @@ const translations = {
     sendTest: 'Send Test Alert',
     testSent: 'Test sent!',
 
+    // Portfolio
+    portfolio: 'Portfolio',
+    portfolioManager: 'Portfolio Manager',
+    assetAllocation: 'Asset Allocation',
+    riskExposure: 'Risk Exposure',
+    holdingsDetail: 'Holdings Detail',
+    avgCost: 'Avg Cost',
+    currentPrice: 'Price',
+    marketValue: 'Mkt Value',
+    unrealizedPnL: 'Unrealized PnL',
+    exposure: 'Exposure',
+    daysHeld: 'Days',
+    closePosition: 'Close Pos',
+    confirmClose: 'Confirm Close?',
+
     // Auth
     login: 'Login',
     register: 'Register',
@@ -126,6 +144,21 @@ const translations = {
     profile: 'Profile'
   },
   zh: {
+    // Portfolio
+    portfolio: '持仓管理',
+    portfolioManager: '持仓管理',
+    assetAllocation: '资产分布',
+    riskExposure: '风险敞口',
+    holdingsDetail: '持仓概览',
+    avgCost: '持仓成本',
+    currentPrice: '最新价',
+    marketValue: '市值',
+    unrealizedPnL: '浮动盈亏',
+    exposure: '仓位占比',
+    daysHeld: '持仓天数',
+    closePosition: '平仓',
+    confirmClose: '确认平仓?',
+
     // Sidebar
     dashboard: '仪表盘',
     market: '市场行情',
@@ -164,6 +197,8 @@ const translations = {
     performanceCurve: '资金曲线',
     equity: '净值',
     positions: '持仓',
+    currentHoldings: '当前持仓',
+    noPositions: '暂无持仓',
     recentActivity: '近期活动',
     waitingForData: '等待市场数据...',
     chartView: '图表视图',
@@ -175,6 +210,7 @@ const translations = {
     agent: '智能体',
     action: '操作',
     symbol: '标的',
+    quantity: '数量',
     strategy: '策略',
     price: '价格',
     change: '涨跌幅',

@@ -4,7 +4,7 @@ import {
     MarketData, TradeExecution, LogEntry,
     TradeAction, BrokerConfig, TradingAgent, StockPool, NotificationConfig, PortfolioState, AgentHealthMap, AIDecisionRecord
 } from './types';
-import { fetchBatchQuotes, fetchMarketData, resetMarketService, triggerBackendRefresh, updateSpecificStocks } from './services/marketService';
+import { fetchMarketData, fetchBatchQuotes, updateSpecificStocks, fetchStockHistory, resetMarketService, triggerBackendRefresh } from './services/marketService';
 import { analyzeMarket } from './services/geminiService';
 import { dataApi } from './services/api';
 import { sendNotification } from './services/notificationService';
@@ -13,6 +13,8 @@ import { SettingsView } from './components/SettingsView';
 import { FundManagement } from './components/FundManagement';
 import { AuthView } from './components/AuthView';
 import { DecisionLogView } from './components/DecisionLogView';
+import { PositionsTable } from './components/PositionsTable';
+import { PortfolioView } from './components/PortfolioView';
 import { useAuth } from './contexts/AuthContext';
 import {
     Play, Pause, FileDown, Search, Zap, Menu, Eye
@@ -184,11 +186,11 @@ function App() {
     useEffect(() => {
         const onError = (event: ErrorEvent) => {
             console.error('Global Error', event.error || event.message);
-            alert(`发生错误：${event.message || '未知错误'}`);
+            alert(`发生错误：${event.message || '未知错误'} `);
         };
         const onRejection = (event: PromiseRejectionEvent) => {
             console.error('Unhandled Rejection', event.reason);
-            alert(`请求失败：${event.reason?.message || event.reason || '未知原因'}`);
+            alert(`请求失败：${event.reason?.message || event.reason || '未知原因'} `);
         };
         window.addEventListener('error', onError);
         window.addEventListener('unhandledrejection', onRejection);
@@ -292,7 +294,7 @@ function App() {
             const execPrice = price * slippageFactor;
             const driftPct = Math.abs(execPrice - price) / Math.max(price, 1e-6) * 100;
             if (driftPct > risk.limitTolerancePct) {
-                addLog('TRADE', `滑点超限，放弃成交 ${symbol}`, agentId);
+                addLog('TRADE', `滑点超限，放弃成交 ${symbol} `, agentId);
                 return agent;
             }
 
@@ -365,7 +367,7 @@ function App() {
             };
 
             setTradeHistory(prevHist => [newTrade, ...prevHist]);
-            addLog('TRADE', `${agentName}: ${action} ${actualQuantity} ${symbol}`, agentId);
+            addLog('TRADE', `${agentName}: ${action} ${actualQuantity} ${symbol} `, agentId);
 
             // Notification Trigger
             if (notifyRef.current.enabled) {
@@ -395,16 +397,26 @@ function App() {
         if (stocks.length === 0 || targetAgents.length === 0) return;
 
         stocks.forEach((stock, idx) => {
-            setTimeout(() => {
+            // Sequential delay to prevent burst
+            setTimeout(async () => {
+                // Fetch History Context Concurrently (Optional but recommended)
+                let history: any[] = [];
+                try {
+                    history = await fetchStockHistory(stock.symbol, 10);
+                } catch (e) {
+                    console.warn(`Failed to fetch history for ${stock.symbol}`, e);
+                }
+
                 targetAgents.forEach(agent => {
                     if (!agent.isRunning) return;
                     const health = agentHealth[agent.id];
                     if (health && !health.ok) {
-                        addLog('ERROR', `${agent.name} 模型不可用：${health.reason || ''}`, agent.id);
+                        addLog('ERROR', `${agent.name} 模型不可用：${health.reason || ''} `, agent.id);
                         return;
                     }
 
-                    analyzeMarket(stock, agent.portfolio, agent.config, language).then(decision => {
+                    // Pass history to analyzeMarket
+                    analyzeMarket(stock, agent.portfolio, agent.config, language, history).then(decision => {
                         // Record ALL decisions (BUY/SELL/HOLD)
                         const record: AIDecisionRecord = {
                             id: Math.random().toString(36).substr(2, 9),
@@ -434,7 +446,7 @@ function App() {
                         }
                     });
                 });
-            }, idx * 100);
+            }, idx * 500); // 500ms delay per stock to allow history fetch
         });
     }, [language, executeTradeForAgent, marketHealthy, agentHealth, addDecision]);
 
@@ -615,7 +627,7 @@ function App() {
 
             } catch (err: any) {
                 console.error("Trading Cycle Error:", err);
-                addLog('ERROR', `Failed to fetch market data, will retry soon: ${err?.message || ''}`);
+                addLog('ERROR', `Failed to fetch market data, will retry soon: ${err?.message || ''} `);
                 setMarketHealthy(false);
                 setMarketError(err?.message || '行情获取失败');
                 tradingSuspendedRef.current = true;
@@ -672,7 +684,7 @@ function App() {
                         updates = await updateSpecificStocks(allSymbols);
                     } catch (e: any) {
                         console.error("Pool update error", e);
-                        addLog('ERROR', `Pool quotes refresh failed, retry soon: ${e?.message || ''}`);
+                        addLog('ERROR', `Pool quotes refresh failed, retry soon: ${e?.message || ''} `);
                         timeoutId = setTimeout(runPoolCycle, Math.floor(Math.random() * 15000) + 15000); // 15~30s
                         return;
                     }
@@ -761,15 +773,15 @@ function App() {
         if (!globalRunning) {
             const unavailableAgents = agentsRef.current.filter(a => !agentHealth[a.id]?.ok);
             if (unavailableAgents.length > 0) {
-                alert(`下列智能体不可用，请先修复：${unavailableAgents.map(a => a.name).join(', ')}`);
+                alert(`下列智能体不可用，请先修复：${unavailableAgents.map(a => a.name).join(', ')} `);
                 return;
             }
             if (!marketHealthy) {
-                alert(`行情异常：${marketError || '请先恢复行情数据'}`);
+                alert(`行情异常：${marketError || '请先恢复行情数据'} `);
                 return;
             }
             if (brokerConfig.mode === 'real' && !brokerHealth.ok) {
-                alert(`券商接口不可用：${brokerHealth.reason || ''}`);
+                alert(`券商接口不可用：${brokerHealth.reason || ''} `);
                 return;
             }
         }
@@ -829,10 +841,10 @@ function App() {
         try {
             setMarketRefreshLoading(true);
             const resp = await triggerBackendRefresh();
-            addLog('SYSTEM', `Forced backend refresh triggered, total=${resp.total || 0}`);
+            addLog('SYSTEM', `Forced backend refresh triggered, total = ${resp.total || 0} `);
         } catch (e: any) {
             console.error(e);
-            addLog('ERROR', `Backend refresh failed: ${e?.message || ''}`);
+            addLog('ERROR', `Backend refresh failed: ${e?.message || ''} `);
         } finally {
             setMarketRefreshLoading(false);
         }
@@ -899,10 +911,10 @@ function App() {
                     <div className="flex items-center gap-4">
                         <button
                             onClick={toggleGlobalRun}
-                            className={`flex items-center gap-2 px-4 md:px-6 py-2 md:py-2.5 rounded-full font-semibold transition-all duration-300 shadow-lg text-xs md:text-sm ${globalRunning
+                            className={`flex items - center gap - 2 px - 4 md: px - 6 py - 2 md: py - 2.5 rounded - full font - semibold transition - all duration - 300 shadow - lg text - xs md: text - sm ${globalRunning
                                 ? 'bg-white text-black hover:bg-neutral-200 shadow-white/20'
                                 : 'bg-neutral-800 text-white hover:bg-neutral-700 border border-white/10'
-                                }`}
+                                } `}
                         >
                             {globalRunning ? <Pause className="w-4 h-4 fill-black" /> : <Play className="w-4 h-4 fill-white" />}
                             {globalRunning ? t('stopAll') : t('startAll')}
@@ -920,6 +932,8 @@ function App() {
                                 setBrokerConfig={setBrokerConfig}
                                 onReset={handleReset}
                             />
+
+                            <PositionsTable agents={agents} />
 
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                 <div className="lg:col-span-2 bg-white/5 backdrop-blur-xl border border-glass-border rounded-3xl p-4 md:p-6 shadow-xl">
@@ -964,7 +978,7 @@ function App() {
                                         <div key={agent.id} className="bg-white/5 backdrop-blur-md border border-glass-border rounded-3xl p-5 relative overflow-hidden group hover:bg-white/10 transition-all duration-300">
                                             <div className="flex justify-between items-start mb-4">
                                                 <h4 className="font-semibold text-white">{agent.name}</h4>
-                                                <div className={`w-2 h-2 rounded-full ${agent.isRunning ? 'bg-white animate-pulse' : 'bg-neutral-700'}`} />
+                                                <div className={`w - 2 h - 2 rounded - full ${agent.isRunning ? 'bg-white animate-pulse' : 'bg-neutral-700'} `} />
                                             </div>
                                             <div className="space-y-1">
                                                 <p className="text-xs text-neutral-500 uppercase tracking-wider">{t('equity')}</p>
@@ -1000,10 +1014,10 @@ function App() {
                                                     <td className="py-4 pl-4 text-neutral-400 font-mono text-xs">{tradeItem.timestamp.split('T')[1]?.split('.')[0]}</td>
                                                     <td className="py-4 text-white font-medium">{tradeItem.agentName}</td>
                                                     <td className="py-4">
-                                                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border ${tradeItem.action === 'BUY'
+                                                        <span className={`px - 2 py - 1 rounded text - [10px] font - bold uppercase tracking - wide border ${tradeItem.action === 'BUY'
                                                             ? 'bg-white text-black border-white'
                                                             : 'bg-transparent text-neutral-500 border-neutral-700 line-through decoration-neutral-500'
-                                                            }`}>
+                                                            } `}>
                                                             {tradeItem.action}
                                                         </span>
                                                     </td>
@@ -1024,8 +1038,8 @@ function App() {
                                         <div key={tradeItem.id} className="bg-white/5 rounded-xl p-4 border border-white/5">
                                             <div className="flex justify-between items-center mb-2">
                                                 <span className="text-neutral-400 text-xs font-mono">{tradeItem.timestamp.split('T')[1].split('.')[0]}</span>
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${tradeItem.action === 'BUY' ? 'bg-white text-black border-white' : 'text-neutral-500 border-neutral-700'
-                                                    }`}>{tradeItem.action}</span>
+                                                <span className={`px - 2 py - 0.5 rounded text - [10px] font - bold uppercase tracking - wide border ${tradeItem.action === 'BUY' ? 'bg-white text-black border-white' : 'text-neutral-500 border-neutral-700'
+                                                    } `}>{tradeItem.action}</span>
                                             </div>
                                             <div className="flex justify-between items-center">
                                                 <span className="text-white font-medium">{tradeItem.symbol}</span>
@@ -1035,6 +1049,15 @@ function App() {
                                     ))}
                                 </div>
                             </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'portfolio' && (
+                        <div className="max-w-7xl mx-auto space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-500 pb-20">
+                            <PortfolioView
+                                agents={agents}
+                                marketTotalEquity={agents.reduce((acc, a) => acc + a.portfolio.totalEquity, 0)}
+                            />
                         </div>
                     )}
 
@@ -1086,7 +1109,7 @@ function App() {
                                                     <td className="p-4 font-mono text-neutral-400 group-hover:text-purple-300 transition-colors">{stock.symbol}</td>
                                                     <td className="p-4 font-medium text-white">{stock.name}</td>
                                                     <td className="p-4 text-right font-mono text-white">¥{stock.price.toFixed(2)}</td>
-                                                    <td className={`p-4 text-right font-mono font-bold ${stock.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                    <td className={`p - 4 text - right font - mono font - bold ${stock.change >= 0 ? 'text-green-400' : 'text-red-400'} `}>
                                                         {stock.change > 0 ? '+' : ''}{stock.change.toFixed(2)}%
                                                     </td>
                                                     <td className="p-4 text-right font-mono text-neutral-500">{(stock.volume / 10000).toFixed(1)}w</td>
@@ -1154,7 +1177,7 @@ function App() {
                                                 <td className="py-4 pl-2 font-mono text-xs">{tradeItem.timestamp.replace('T', ' ').split('.')[0]}</td>
                                                 <td className="py-4 text-white font-medium">{tradeItem.agentName}</td>
                                                 <td className="py-4">
-                                                    <span className={`font-bold ${tradeItem.action === 'BUY' ? 'text-white' : 'text-neutral-500 line-through'}`}>
+                                                    <span className={`font - bold ${tradeItem.action === 'BUY' ? 'text-white' : 'text-neutral-500 line-through'} `}>
                                                         {tradeItem.action}
                                                     </span>
                                                 </td>
@@ -1181,7 +1204,7 @@ function App() {
                                         </div>
                                         <div className="flex justify-between items-end mb-4">
                                             <div>
-                                                <div className={`text-lg font-bold ${tradeItem.action === 'BUY' ? 'text-white' : 'text-neutral-500 line-through'}`}>{tradeItem.action} {tradeItem.symbol}</div>
+                                                <div className={`text - lg font - bold ${tradeItem.action === 'BUY' ? 'text-white' : 'text-neutral-500 line-through'} `}>{tradeItem.action} {tradeItem.symbol}</div>
                                                 <div className="text-sm text-neutral-400 font-mono">@ 楼{tradeItem.price.toFixed(2)}</div>
                                             </div>
                                             <div className="text-right">
@@ -1207,11 +1230,11 @@ function App() {
                                     <div key={log.id} className="flex flex-col md:flex-row md:gap-4 border-b border-white/5 pb-1.5 hover:bg-white/5 px-2 rounded transition-colors">
                                         <div className="flex gap-2 md:w-48 shrink-0">
                                             <span className="text-neutral-600 select-none">{log.timestamp.split('T')[1]}</span>
-                                            <span className={`font-bold ${log.type === 'ERROR' ? 'text-white bg-red-900/50 px-1 rounded' :
+                                            <span className={`font - bold ${log.type === 'ERROR' ? 'text-white bg-red-900/50 px-1 rounded' :
                                                 log.type === 'TRADE' ? 'text-white' :
                                                     log.type === 'POOL' ? 'text-blue-400' :
                                                         log.type === 'NOTIFY' ? 'text-purple-400' : 'text-neutral-500'
-                                                }`}>{log.type}</span>
+                                                } `}>{log.type}</span>
                                         </div>
                                         <span className="text-neutral-300 break-all mt-1 md:mt-0">{log.message}</span>
                                     </div>

@@ -10,36 +10,36 @@ const FORCE_BACKEND = import.meta.env.VITE_FORCE_BACKEND !== 'false' || IS_TAURI
 // --- Fallback / Simulation Configuration ---
 
 const MOCK_STOCKS = [
-  { symbol: "600519", name: "贵州茅台", price: 1650.00, volatility: 0.012 },
-  { symbol: "300750", name: "宁德时代", price: 180.50, volatility: 0.022 },
-  { symbol: "000001", name: "平安银行", price: 10.30, volatility: 0.008 },
-  { symbol: "601127", name: "赛力斯", price: 92.00, volatility: 0.035 },
-  { symbol: "601318", name: "中国平安", price: 42.50, volatility: 0.011 },
-  { symbol: "002594", name: "比亚迪", price: 210.20, volatility: 0.018 },
-  { symbol: "600036", name: "招商银行", price: 31.80, volatility: 0.009 },
-  { symbol: "600900", name: "长江电力", price: 24.50, volatility: 0.005 },
-  { symbol: "000858", name: "五粮液", price: 145.30, volatility: 0.015 },
-  { symbol: "603259", name: "药明康德", price: 52.40, volatility: 0.025 },
-  { symbol: "300059", name: "东方财富", price: 13.20, volatility: 0.028 },
-  { symbol: "601888", name: "中国中免", price: 78.60, volatility: 0.019 },
-  { symbol: "600276", name: "恒瑞医药", price: 45.10, volatility: 0.014 },
-  { symbol: "000333", name: "美的集团", price: 63.50, volatility: 0.012 },
-  { symbol: "601012", name: "隆基绿能", price: 18.90, volatility: 0.032 },
+    { symbol: "600519", name: "贵州茅台", price: 1650.00, volatility: 0.012 },
+    { symbol: "300750", name: "宁德时代", price: 180.50, volatility: 0.022 },
+    { symbol: "000001", name: "平安银行", price: 10.30, volatility: 0.008 },
+    { symbol: "601127", name: "赛力斯", price: 92.00, volatility: 0.035 },
+    { symbol: "601318", name: "中国平安", price: 42.50, volatility: 0.011 },
+    { symbol: "002594", name: "比亚迪", price: 210.20, volatility: 0.018 },
+    { symbol: "600036", name: "招商银行", price: 31.80, volatility: 0.009 },
+    { symbol: "600900", name: "长江电力", price: 24.50, volatility: 0.005 },
+    { symbol: "000858", name: "五粮液", price: 145.30, volatility: 0.015 },
+    { symbol: "603259", name: "药明康德", price: 52.40, volatility: 0.025 },
+    { symbol: "300059", name: "东方财富", price: 13.20, volatility: 0.028 },
+    { symbol: "601888", name: "中国中免", price: 78.60, volatility: 0.019 },
+    { symbol: "600276", name: "恒瑞医药", price: 45.10, volatility: 0.014 },
+    { symbol: "000333", name: "美的集团", price: 63.50, volatility: 0.012 },
+    { symbol: "601012", name: "隆基绿能", price: 18.90, volatility: 0.032 },
 ];
 
 let mockState: Map<string, MarketData> = new Map();
 
 // Initialize Mock State
 MOCK_STOCKS.forEach(stock => {
-  mockState.set(stock.symbol, {
-    symbol: stock.symbol,
-    name: stock.name,
-    price: stock.price,
-    change: 0,
-    volume: Math.floor(Math.random() * 1000000),
-    timestamp: new Date().toISOString(),
-    trend: Array(20).fill(stock.price),
-  });
+    mockState.set(stock.symbol, {
+        symbol: stock.symbol,
+        name: stock.name,
+        price: stock.price,
+        change: 0,
+        volume: Math.floor(Math.random() * 1000000),
+        timestamp: new Date().toISOString(),
+        trend: Array(20).fill(stock.price),
+    });
 });
 
 // --- Real Data Logic (East Money / Oriental Fortune) ---
@@ -47,9 +47,9 @@ MOCK_STOCKS.forEach(stock => {
 const trendCache: Map<string, number[]> = new Map();
 
 const parseDoubleSafe = (val: any): number => {
-  if (val === '-' || val === null || val === undefined || val === '') return 0;
-  const num = parseFloat(val);
-  return isNaN(num) ? 0 : num;
+    if (val === '-' || val === null || val === undefined || val === '') return 0;
+    const num = parseFloat(val);
+    return isNaN(num) ? 0 : num;
 };
 
 const stripHtml = (val: string) => val.replace(/<[^>]*>/g, '');
@@ -95,6 +95,27 @@ export const fetchBatchQuotes = async (symbols: string[]): Promise<MarketData[]>
     } catch (e) {
         console.warn('Backend quotes failed', e);
         throw e;
+    }
+    return [];
+};
+
+import { MarketData, KLineData } from "../types";
+
+// ... existing code ...
+
+export const fetchStockHistory = async (symbol: string, days: number = 20): Promise<KLineData[]> => {
+    if (!symbol) return [];
+    // Only backend has history for now
+    const url = `${API_BASE}/history?symbol=${symbol}&days=${days}`;
+    try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Backend history fetch failed');
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+            return json.data as KLineData[];
+        }
+    } catch (e) {
+        console.warn('History fetch failed', e);
     }
     return [];
 };
@@ -151,7 +172,7 @@ const fetchEastMoneyData = async (page: number, pageSize: number, keyword: strin
             let mapped = list.map((item: any) => {
                 const symbol = item.f12;
                 const price = parseDoubleSafe(item.f2);
-                
+
                 let trend = trendCache.get(symbol) || [];
                 if (price > 0) {
                     trend = [...trend, price];
@@ -171,7 +192,7 @@ const fetchEastMoneyData = async (page: number, pageSize: number, keyword: strin
                     timestamp: new Date().toISOString(),
                     trend: trend
                 };
-                
+
                 mockState.set(symbol, mkData);
                 return mkData;
             });
@@ -192,10 +213,10 @@ const fetchEastMoneyData = async (page: number, pageSize: number, keyword: strin
 };
 
 const fetchYingweiData = async (page: number, pageSize: number, keyword: string): Promise<MarketResponse> => {
-  if (!YW_API) throw new Error("YW_API not configured");
-  const url = new URL(YW_API);
-  url.searchParams.set('page', String(page));
-  url.searchParams.set('pageSize', String(pageSize));
+    if (!YW_API) throw new Error("YW_API not configured");
+    const url = new URL(YW_API);
+    url.searchParams.set('page', String(page));
+    url.searchParams.set('pageSize', String(pageSize));
     if (keyword) url.searchParams.set('q', keyword);
 
     const res = await fetch(url.toString());
@@ -212,15 +233,15 @@ const fetchYingweiData = async (page: number, pageSize: number, keyword: string)
         trend: []
     })).filter((m: MarketData) => m.symbol && m.name);
 
-  if (keyword) {
-      const key = keyword.toLowerCase();
-      return {
-          success: true,
-          data: mapped.filter((m: MarketData) => m.symbol.toLowerCase().includes(key) || m.name.toLowerCase().includes(key)),
-          total: mapped.length
-      };
-  }
-  return { success: true, data: mapped, total: mapped.length };
+    if (keyword) {
+        const key = keyword.toLowerCase();
+        return {
+            success: true,
+            data: mapped.filter((m: MarketData) => m.symbol.toLowerCase().includes(key) || m.name.toLowerCase().includes(key)),
+            total: mapped.length
+        };
+    }
+    return { success: true, data: mapped, total: mapped.length };
 };
 
 const normalizeExchangeFallback = (symbol: string, name: string): MarketData => ({
@@ -301,13 +322,13 @@ const fetchSseSzFallback = async (page: number, pageSize: number, keyword: strin
 
 const fetchMockUpdate = async (): Promise<MarketData[]> => {
     await new Promise(resolve => setTimeout(resolve, 100));
-    
+
     const newData: MarketData[] = [];
-    
+
     mockState.forEach((data, symbol) => {
         const base = MOCK_STOCKS.find(s => s.symbol === symbol);
         const vol = base ? base.volatility : 0.02;
-        
+
         // Random Walk
         const move = (Math.random() - 0.5) * 2 * vol;
         let newPrice = data.price * (1 + move);
@@ -323,7 +344,7 @@ const fetchMockUpdate = async (): Promise<MarketData[]> => {
             timestamp: new Date().toISOString(),
             trend: newTrend
         };
-        
+
         mockState.set(symbol, updated);
         newData.push(updated);
     });
@@ -395,7 +416,7 @@ export const fetchMarketData = async (page = 1, pageSize = 4000, keyword = ''): 
 };
 
 export const resetMarketService = () => {
-     MOCK_STOCKS.forEach(stock => {
+    MOCK_STOCKS.forEach(stock => {
         mockState.set(stock.symbol, {
             symbol: stock.symbol,
             name: stock.name,

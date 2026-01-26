@@ -57,3 +57,18 @@ types.ts                # 共享类型定义
 
 ## 许可
 未明确许可协议，请在发布前补充合适的开源协议（如 MIT）。
+
+## 更新日志 (What's New)
+### v1.0.1 (Current)
+- **[Feature] 持仓管理看板**：仪表盘新增 `PositionsTable`，实时展示多智能体持仓状态（数量/市值/盈亏）。
+- **[Fix] 性能优化**：修复了行情轮询导致的无限 Loop 占用 CPU 问题。
+- **[Fix] 环境配置**：修复了 Python 环境依赖缺失与前端构建错误。
+
+## 路线图 (Roadmap)
+详情请见 `docs/upgrade_plan.md`。
+
+- [x] **跨天上下文 (Cross-day Context)**：引入后端 `/history` 接口，支持日线 K 线拉取。
+- [x] **量价分析 (Volume Analysis)**：AI 决策引入成交量与资金流向判断。
+- [x] **持仓感知增强**：
+    - 新增独立 "Portfolio Manager" 页面，可视化展示仓位风险与盈亏。
+    - AI Prompt 深度集成 `Avg Cost` 与 `Unrealized PnL`。

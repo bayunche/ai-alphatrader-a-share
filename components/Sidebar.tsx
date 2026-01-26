@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, Settings, History, Activity, FileText, Download, Zap, Languages, LogOut, UserCircle, X } from 'lucide-react';
+import { LayoutDashboard, Settings, History, Activity, FileText, Download, Zap, Languages, LogOut, UserCircle, X, PieChart } from 'lucide-react';
 import { useTranslation } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -18,6 +18,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onExp
 
     const navItems = [
         { id: 'dashboard', icon: LayoutDashboard, label: t('dashboard') },
+        { id: 'portfolio', icon: PieChart, label: t('portfolio') },
         { id: 'history', icon: History, label: t('history') },
         { id: 'thoughts', icon: Activity, label: t('thoughts') || 'AI Sense' },
         { id: 'logs', icon: FileText, label: t('logs') },
@@ -59,8 +60,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onExp
                             key={item.id}
                             onClick={() => handleNav(item.id)}
                             className={`relative group w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl transition-all duration-500 ease-out ${isActive
-                                    ? 'bg-white text-black shadow-xl shadow-white/5 translate-x-2'
-                                    : 'text-neutral-400 hover:bg-white/5 hover:text-white hover:translate-x-1'
+                                ? 'bg-white text-black shadow-xl shadow-white/5 translate-x-2'
+                                : 'text-neutral-400 hover:bg-white/5 hover:text-white hover:translate-x-1'
                                 }`}
                         >
                             <item.icon className={`w-5 h-5 transition-transform duration-500 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`} />

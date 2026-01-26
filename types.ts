@@ -10,6 +10,16 @@ export interface MarketData {
   trend: number[];
 }
 
+export interface KLineData {
+  date: string;
+  open: number;
+  close: number;
+  high: number;
+  low: number;
+  volume: number;
+  change_pct: number;
+}
+
 // Trading Core Types
 export enum TradeAction {
   BUY = 'BUY',

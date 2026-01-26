@@ -41,6 +41,51 @@ def quotes():
   return _ok(data)
 
 
+@app.route("/history")
+def history():
+  symbol = request.args.get("symbol", "")
+  if not symbol:
+    return jsonify({"success": False, "error": "symbol required"}), 400
+  
+  # Default last 20 days
+  days = request.args.get("days", 20)
+  try:
+      days = int(days)
+  except:
+      days = 20
+      
+  # Akshare requires specific date range or it returns all. 
+  # For simplicity, we fetch all (default) or use start_date if needed, 
+  # but stock_zh_a_hist is fast enough for recent data usually.
+  # Adjust symbol format: 600000 -> 600000
+  try:
+    df = ak.stock_zh_a_hist(symbol=symbol, period="daily", adjust="qfq")
+    if df.empty:
+       return jsonify({"success": True, "data": []})
+    
+    # Take last N
+    df = df.tail(days)
+    
+    data = []
+    for _, row in df.iterrows():
+      data.append({
+        "date": row["日期"],
+        "open": float(row["开盘"]),
+        "close": float(row["收盘"]),
+        "high": float(row["最高"]),
+        "low": float(row["最低"]),
+        "volume": float(row["成交量"]),
+        "amount": float(row["成交额"]),
+        "amplitude": float(row["振幅"]),
+        "change_pct": float(row["涨跌幅"]),
+        "change_amt": float(row["涨跌额"]),
+        "turnover": float(row["换手率"])
+      })
+    return _ok(data)
+  except Exception as e:
+    return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/master")
 def master():
   df = ak.stock_zh_a_spot_em()

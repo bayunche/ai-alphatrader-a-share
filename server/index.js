@@ -103,8 +103,31 @@ db.exec(
 
 // --- Routes ---
 
-// Login / Get User
-app.post('/api/auth/login', (req, res) => {
+// Login // History Data Proxy
+app.get('/api/history', async (req, res) => {
+  const { symbol, days } = req.query;
+  if (!symbol) return res.status(400).json({ success: false, error: 'symbol required' });
+
+  try {
+    const targetUrl = `${AKSHARE_BASE}/history?symbol=${symbol}&days=${days || 20}`;
+    const resp = await fetch(targetUrl);
+
+    if (!resp.ok) {
+      // If akshare fails, maybe fallback to eastmoney generic kline?
+      // For now just return error or empty
+      console.warn(`[History] fetch failed ${resp.status}`);
+      return res.json({ success: true, data: [] });
+    }
+    const json = await resp.json();
+    res.json(json);
+  } catch (e) {
+    console.error(`[History] proxy error:`, e.message);
+    res.json({ success: true, data: [] }); // Soft fail
+  }
+});
+
+// Create Agent
+app.post('/api/agent', (req, res) => {
   const { username } = req.body;
   db.get('SELECT * FROM users WHERE username = ?', [username], (err, row) => {
     if (err) return respondError(res, err, 500, 'auth/login');
@@ -117,8 +140,8 @@ app.post('/api/auth/login', (req, res) => {
 app.post('/api/auth/register', (req, res) => {
   const { username } = req.body;
   const id = Math.random().toString(36).substr(2, 9);
-  
-  db.run('INSERT INTO users (id, username) VALUES (?, ?)', [id, username], function(err) {
+
+  db.run('INSERT INTO users (id, username) VALUES (?, ?)', [id, username], function (err) {
     if (err) {
       if (err.message.includes('UNIQUE')) return respondError(res, new Error('Username exists'), 400, 'auth/register');
       return respondError(res, err, 500, 'auth/register');
@@ -132,7 +155,7 @@ app.get('/api/workspace/:userId', (req, res) => {
   const { userId } = req.params;
   db.get('SELECT data FROM workspaces WHERE user_id = ?', [userId], (err, row) => {
     if (err) return respondError(res, err, 500, 'workspace/load');
-    
+
     if (!row) {
       return res.json({ success: true, data: null }); // No saved workspace yet
     }
@@ -148,7 +171,7 @@ app.get('/api/workspace/:userId', (req, res) => {
 app.post('/api/workspace', (req, res) => {
   const { userId, data } = req.body;
   const jsonStr = JSON.stringify(data);
-  
+
   db.run(`INSERT INTO workspaces (user_id, data, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
           ON CONFLICT(user_id) DO UPDATE SET data=excluded.data, updated_at=CURRENT_TIMESTAMP`,
     [userId, jsonStr], (err) => {
@@ -464,7 +487,7 @@ const fetchQuotesBatch = async (symbols = []) => {
   try {
     const akQuotes = await fetchAkshareQuotes(unique);
     akQuotes.forEach((q) => results.set(q.symbol, q));
-  } catch (e) {}
+  } catch (e) { }
 
   // 2) EastMoney 补齐缺失
   const missing1 = unique.filter((s) => !results.has(s));
@@ -483,7 +506,7 @@ const fetchQuotesBatch = async (symbols = []) => {
     try {
       const qs = await fetchYingweiQuotes(missing2);
       qs.forEach((q) => results.set(q.symbol, q));
-    } catch (e) {}
+    } catch (e) { }
   }
 
   // 4) SSE/SZ 静态补齐（无价格，为0，仅确保存在）
@@ -655,7 +678,7 @@ const loadMasterFromFile = (page, pageSize, keyword) => {
     console.warn('Load master file failed', e.message);
     try {
       fs.unlinkSync(masterFilePath);
-    } catch (_) {}
+    } catch (_) { }
     return null;
   }
 };
