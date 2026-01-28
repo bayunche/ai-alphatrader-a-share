@@ -27,11 +27,12 @@ const checkOpenAICompatible = async (endpoint: string, apiKey?: string, modelNam
     const listRes = await abortableFetch(listUrl, { method: 'GET', headers });
     if (!listRes.ok) throw new Error(`HTTP ${listRes.status}`);
 
-    // 具体模型校验：确保所选模型存在且可访问
+    // 具体模型校验：从模型列表中查找
     if (modelName && modelName.trim() !== '') {
-      const modelUrl = `${base}/v1/models/${modelName}`;
-      const modelRes = await abortableFetch(modelUrl, { method: 'GET', headers });
-      if (!modelRes.ok) throw new Error(`模型不可用 (${modelName})`);
+      const json = await listRes.json();
+      const models = json?.data || [];
+      const exists = models.some((m: any) => m.id === modelName || m.model === modelName);
+      if (!exists) throw new Error(`模型不可用 (${modelName})`);
     }
     return { ok: true };
   } catch (e: any) {
