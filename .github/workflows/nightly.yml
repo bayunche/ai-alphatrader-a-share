@@ -1,0 +1,125 @@
+name: Nightly Build
+
+on:
+  schedule:
+    # 北京时间凌晨 3 点 = UTC 19:00（前一天）
+    - cron: '0 19 * * *'
+  workflow_dispatch:  # 支持手动触发
+
+env:
+  TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+  TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+            tauri-target: ''
+            node-pkg-target: node18-win-x64
+            python-cmd: python
+          - os: macos-latest
+            rust-target: x86_64-apple-darwin
+            tauri-target: x86_64-apple-darwin
+            node-pkg-target: node18-macos-x64
+            python-cmd: python3
+          - os: macos-14
+            rust-target: aarch64-apple-darwin
+            tauri-target: aarch64-apple-darwin
+            node-pkg-target: node18-macos-arm64
+            python-cmd: python3
+          - os: ubuntu-22.04
+            rust-target: x86_64-unknown-linux-gnu
+            tauri-target: ''
+            node-pkg-target: node18-linux-x64
+            python-cmd: python3
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install Node dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Install Python dependencies
+        run: |
+          ${{ matrix.python-cmd }} -m pip install --upgrade pip
+          ${{ matrix.python-cmd }} -m pip install pyinstaller akshare
+
+      # 构建 Node.js 服务
+      - name: Build Node server
+        shell: bash
+        run: |
+          npx pkg server/index.js --targets ${{ matrix.node-pkg-target }} --output src-tauri/bin/server-${{ matrix.rust-target }}${{ runner.os == 'Windows' && '.exe' || '' }}
+
+      # 构建 Python akshare 服务
+      - name: Build akshare service
+        shell: bash
+        run: |
+          ${{ matrix.python-cmd }} -m PyInstaller --onefile --name akshare_service server/akshare_service.py
+          # 移动到 bin 目录
+          mkdir -p src-tauri/bin
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            mv dist/akshare_service.exe src-tauri/bin/akshare_service-${{ matrix.rust-target }}.exe
+          else
+            mv dist/akshare_service src-tauri/bin/akshare_service-${{ matrix.rust-target }}
+            chmod +x src-tauri/bin/akshare_service-${{ matrix.rust-target }}
+          fi
+
+      # 构建前端
+      - name: Build frontend
+        run: yarn build
+
+      # 构建 Tauri 应用
+      - name: Build Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: nightly-${{ github.run_id }}
+          releaseName: 'Nightly Build ${{ github.run_id }}'
+          releaseBody: |
+            ⚠️ **Nightly Build - 自动构建版本**
+            
+            构建时间: ${{ github.event.repository.updated_at }}
+            Commit: ${{ github.sha }}
+            
+            此版本为每日自动构建，可能不稳定，仅供测试使用。
+          releaseDraft: false
+          prerelease: true
+          args: ${{ matrix.tauri-target && format('--target {0}', matrix.tauri-target) || '' }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.os }}-${{ matrix.rust-target }}
+          path: |
+            src-tauri/target/**/release/bundle/**/*
+          if-no-files-found: error
