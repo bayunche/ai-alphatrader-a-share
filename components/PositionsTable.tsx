@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { TradingAgent, Position } from '../types';
+import { TradingAgent, PortfolioPosition as Position } from '../types';
 import { useTranslation } from '../contexts/LanguageContext';
 import { Layers, ChevronDown, ChevronUp } from 'lucide-react';
 

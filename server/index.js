@@ -14,8 +14,35 @@ const PORT = process.env.PORT || 38211;
 
 const isPkg = !!process.pkg;
 const appRoot = isPkg ? path.dirname(process.execPath) : __dirname;
-const dataDir = process.env.DATA_DIR || appRoot;
-fs.mkdirSync(dataDir, { recursive: true });
+
+let dataDir = process.env.DATA_DIR;
+if (!dataDir) {
+  if (isPkg) {
+    const APPDATA = process.env.APPDATA;
+    const HOME = process.env.HOME;
+    if (process.platform === 'win32' && APPDATA) {
+      dataDir = path.join(APPDATA, 'ai-alpha-trader', 'data');
+    } else if (HOME) {
+      dataDir = path.join(HOME, '.ai-alpha-trader', 'data');
+    } else {
+      dataDir = appRoot;
+    }
+  } else {
+    dataDir = appRoot;
+  }
+}
+
+console.log('[Server] Data Directory:', dataDir);
+
+try {
+  fs.mkdirSync(dataDir, { recursive: true });
+} catch (e) {
+  console.error('[Server] Failed to create data directory:', dataDir, e);
+  // Fallback to temp dir if completely blocked?
+  // For now let it crash but at least we logged it.
+  throw e;
+}
+
 const dbPath = path.join(dataDir, 'database.sqlite');
 const masterFilePath = path.join(dataDir, 'a_stock_master.json');
 const respondError = (res, err, status = 500, context = 'error') => {

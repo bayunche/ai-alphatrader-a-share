@@ -125,6 +125,7 @@ const translations = {
     daysHeld: 'Days',
     closePosition: 'Close Pos',
     confirmClose: 'Confirm Close?',
+    cash: 'Cash',
 
     // Auth
     login: 'Login',
@@ -158,6 +159,7 @@ const translations = {
     daysHeld: '持仓天数',
     closePosition: '平仓',
     confirmClose: '确认平仓?',
+    cash: '现金',
 
     // Sidebar
     dashboard: '仪表盘',

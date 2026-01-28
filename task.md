@@ -20,10 +20,11 @@
 - [x] **功能验证**: 验证 `BUY`/`SELL`/`HOLD` 均有记录，且重启不丢失。 <!-- id: 7 -->
 - [x] Fix Infinite Polling Loop
 - [x] Add Positions Table to Dashboard
-- [/] **Plan AI Context Upgrade**
+- [x] **Plan AI Context Upgrade**
     - [x] Create `docs/upgrade_plan.md` to document requirements (Cross-day, Volume, Portfolio Context).
     - [x] Implement Backend History API (Phase 1)
     - [x] Update AI Prompt with Cross-day/Volume/Portfolio Context (Phase 2)
+    - [x] Implement Dedicated Portfolio Page (Phase 3)
 - [x] **单元测试 (Unit Tests)**:
     - [x] 配置 Vitest 测试环境。 <!-- id: 10 -->
     - [x] 为 `geminiService.ts` 编写 Mock 测试。 <!-- id: 11 -->
