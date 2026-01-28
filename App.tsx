@@ -66,8 +66,12 @@ function App() {
         maxPositionPct: 60,      // 单标的最大持仓占总权益比例
         maxOrderPct: 20,         // 单次下单最大现金比例
         slippageBps: 10,         // 滑点（基点）
-        limitTolerancePct: 1.0   // 超过该偏离则放弃成交
+        limitTolerancePct: 1.0,  // 超过该偏离则放弃成交
+        minConfidencePct: 85,    // 最低置信度阈值（%）
+        cooldownMinutes: 5       // 同标的交易冷却期（分钟）
     });
+    // 交易冷却记录：{ "agentId:symbol": timestamp }
+    const tradeCooldownRef = useRef<Record<string, number>>({});
     const [brokerHealth, setBrokerHealth] = useState<HealthStatus>({ ok: true });
 
     // Keep a ref of agents to access latest state inside async intervals without triggering re-renders
@@ -418,6 +422,12 @@ function App() {
 
                     // Pass history to analyzeMarket
                     analyzeMarket(stock, agent.portfolio, agent.config, language, history).then(decision => {
+                        const risk = riskConfigRef.current;
+                        const now = Date.now();
+                        const cooldownKey = `${agent.id}:${stock.symbol}`;
+                        const lastTradeTime = tradeCooldownRef.current[cooldownKey] || 0;
+                        const cooldownMs = risk.cooldownMinutes * 60 * 1000;
+
                         // Record ALL decisions (BUY/SELL/HOLD)
                         const record: AIDecisionRecord = {
                             id: Math.random().toString(36).substr(2, 9),
@@ -433,7 +443,23 @@ function App() {
                         };
                         addDecision(record);
 
+                        // 过滤条件 1：置信度阈值
+                        const confidencePct = decision.confidence * 100;
+                        if (confidencePct < risk.minConfidencePct) {
+                            addLog('INFO', `[${agent.name}] ${stock.symbol} 置信度 ${confidencePct.toFixed(0)}% < ${risk.minConfidencePct}%，不执行交易`, agent.id);
+                            return;
+                        }
+
+                        // 过滤条件 2：冷却期
+                        if (decision.action !== TradeAction.HOLD && (now - lastTradeTime) < cooldownMs) {
+                            const remainMin = Math.ceil((cooldownMs - (now - lastTradeTime)) / 60000);
+                            addLog('INFO', `[${agent.name}] ${stock.symbol} 冷却中，还需 ${remainMin} 分钟`, agent.id);
+                            return;
+                        }
+
                         if (decision.action !== TradeAction.HOLD) {
+                            // 记录交易时间用于冷却期
+                            tradeCooldownRef.current[cooldownKey] = now;
                             executeTradeForAgent(
                                 agent.id,
                                 stock.symbol,

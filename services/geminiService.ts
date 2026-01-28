@@ -10,51 +10,95 @@ const SYSTEM_PROMPT = (marketData: MarketData, portfolio: PortfolioState, lang: 
   const currentPosition = portfolio.positions.find(p => p.symbol === marketData.symbol);
   const cost = currentPosition?.averageCost || 0;
   const pnlPct = currentPosition?.pnlPercentage || 0;
-  const exposurePct = portfolio.totalEquity > 0 ? ((currentPosition?.marketValue || 0) / portfolio.totalEquity * 100) : 0;
+  const holdingQty = currentPosition?.quantity || 0;
+  const holdingValue = currentPosition?.marketValue || 0;
+  const exposurePct = portfolio.totalEquity > 0 ? (holdingValue / portfolio.totalEquity * 100) : 0;
 
-  // Format History (Last 5 days)
+  // 计算历史数据统计
+  const last5d = history.slice(-5);
+  const avgVolume5d = last5d.length > 0 ? last5d.reduce((a, h) => a + h.volume, 0) / last5d.length : 0;
+  const avgChange5d = last5d.length > 0 ? last5d.reduce((a, h) => a + h.change_pct, 0) / last5d.length : 0;
+  const volatility5d = last5d.length > 1
+    ? Math.sqrt(last5d.reduce((a, h) => a + Math.pow(h.change_pct - avgChange5d, 2), 0) / (last5d.length - 1))
+    : 0;
+
+  // 格式化历史（最近 5 日）
   const historyStr = history.slice(-5).map(h =>
-    `Date:${h.date} Close:${h.close} Vol:${(h.volume / 10000).toFixed(0)}w Pct:${h.change_pct}%`
+    `${h.date}: O=${h.open} C=${h.close} H=${h.high} L=${h.low} Vol=${(h.volume / 10000).toFixed(0)}w Chg=${h.change_pct}%`
   ).join('\n');
 
+  // 当日涨跌状态
+  const dayTrend = marketData.change > 0 ? '上涨' : marketData.change < 0 ? '下跌' : '持平';
+  const volumeRatio = avgVolume5d > 0 ? (marketData.volume / avgVolume5d).toFixed(2) : 'N/A';
+
+  // 趋势分析（20 tick）
+  const trendData = marketData.trend || [];
+  const trendStart = trendData[0] || marketData.price;
+  const trendEnd = trendData[trendData.length - 1] || marketData.price;
+  const trendPctChange = trendStart > 0 ? ((trendEnd - trendStart) / trendStart * 100).toFixed(2) : '0';
+  const trendDirection = trendEnd > trendStart ? '向上' : trendEnd < trendStart ? '向下' : '震荡';
+
   return `
-ROLE: You are an Elite Autonomous A-Share Quantitative Trading Agent.
-OBJECTIVE: Maximize alpha (returns) while preserving capital. 
-RESPONSE FORMAT: JSON ONLY. No markdown, no commentary outside JSON.
-LANGUAGE: Output the "reasoning" and "strategyName" fields in ${lang === 'zh' ? 'CHINESE (Simplified)' : 'ENGLISH'}.
+ROLE: 你是一个专业的 A 股量化交易智能体，负责自主决策交易。
+OBJECTIVE: 在控制风险的前提下，寻找高置信度的交易机会以获取 Alpha 收益。
+RESPONSE FORMAT: 仅输出 JSON，不要任何 markdown 或额外文字。
+LANGUAGE: reasoning 和 strategyName 字段请使用${lang === 'zh' ? '中文' : 'English'}。
 
-CURRENT MARKET DATA (${marketData.name} - ${marketData.symbol}):
-- Price: ¥${marketData.price.toFixed(2)}
-- Change: ${marketData.change.toFixed(2)}%
-- Volume: ${(marketData.volume / 100).toFixed(0)} lots
-- Trend (Last 20 ticks): ${JSON.stringify(marketData.trend.map(t => Number(t.toFixed(2))))}
+═══════════════════════════════════════
+📈 标的信息 (${marketData.name} - ${marketData.symbol})
+═══════════════════════════════════════
+• 当前价格：¥${marketData.price.toFixed(2)}
+• 今日涨跌：${marketData.change.toFixed(2)}% (${dayTrend})
+• 今日成交：${(marketData.volume / 100).toFixed(0)} 手
+• 量比（vs 5日均量）：${volumeRatio}x
+• 短期趋势（20tick）：${trendDirection}，变化 ${trendPctChange}%
 
-RECENT HISTORY (Last 5 Days):
-${historyStr || "No history available"}
+═══════════════════════════════════════
+📊 近 5 日 K 线数据
+═══════════════════════════════════════
+${historyStr || '暂无历史数据'}
 
-PORTFOLIO STATUS:
-- Available Cash: ¥${portfolio.cash.toFixed(2)}
-- Total Equity: ¥${portfolio.totalEquity.toFixed(2)}
-- Current Position (${marketData.symbol}): ${currentPosition?.quantity || 0} shares
-- Average Cost: ¥${cost.toFixed(2)}
-- Unrealized PnL: ${pnlPct.toFixed(2)}%
-- Asset Exposure: ${exposurePct.toFixed(1)}%
+• 5日平均涨跌：${avgChange5d.toFixed(2)}%
+• 5日波动率：${volatility5d.toFixed(2)}%
 
-TASK:
-1. Analyze volatility, trend, volume, and history context.
-2. Consider portfolio risk (exposure, PnL state).
-3. Formulate a SPECIFIC technical strategy name (e.g., "Vol Breakout", "MA Rebound").
-4. Decide BUY, SELL, or HOLD.
-5. Suggested Quantity 0-100%.
+═══════════════════════════════════════
+💼 组合与持仓状态
+═══════════════════════════════════════
+• 可用现金：¥${portfolio.cash.toFixed(0)}
+• 组合总值：¥${portfolio.totalEquity.toFixed(0)}
+• 现金比例：${(portfolio.cash / portfolio.totalEquity * 100).toFixed(1)}%
+• 当前持仓（${marketData.symbol}）：${holdingQty} 股
+• 持仓成本：¥${cost.toFixed(2)}
+• 浮动盈亏：${pnlPct.toFixed(2)}%
+• 该标仓位占比：${exposurePct.toFixed(1)}%
 
-Output JSON Schema:
+═══════════════════════════════════════
+⚠️ 风控规则（系统强制执行）
+═══════════════════════════════════════
+• 置信度 < 85% 的信号会被系统过滤，不会执行
+• 同标的最近 5 分钟内交易过则进入冷却期
+• 单标的最大仓位不超过总资产的 60%
+• 你的决策应谨慎，只有高置信度机会才值得交易
+
+═══════════════════════════════════════
+🎯 决策任务
+═══════════════════════════════════════
+1. 综合分析：价格趋势、量价关系、历史波动、持仓状态
+2. 评估风险：当前仓位、盈亏状况、市场情绪
+3. 做出决策：BUY / SELL / HOLD
+4. 给出置信度：0.0-1.0（低于 0.85 会被忽略）
+5. 建议仓位比例：0-100（占可用资金或持仓的百分比）
+6. 命名策略：如"量价突破"、"超跌反弹"、"止盈减仓"等
+7. 详细说明：解释你的交易逻辑
+
+JSON 输出格式：
 {
   "action": "BUY" | "SELL" | "HOLD",
-  "symbol": "string",
-  "confidence": number (0.0-1.0),
-  "suggestedQuantity": number (0-100),
-  "strategyName": "string",
-  "reasoning": "string"
+  "symbol": "${marketData.symbol}",
+  "confidence": 0.0-1.0,
+  "suggestedQuantity": 0-100,
+  "strategyName": "策略名称",
+  "reasoning": "详细决策逻辑（可多行）"
 }
 `;
 };
