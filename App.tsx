@@ -15,6 +15,7 @@ import { AuthView } from './components/AuthView';
 import { DecisionLogView } from './components/DecisionLogView';
 import { PositionsTable } from './components/PositionsTable';
 import { PortfolioView } from './components/PortfolioView';
+import { AboutView } from './components/AboutView';
 import { useAuth } from './contexts/AuthContext';
 import {
     Play, Pause, FileDown, Search, Zap, Menu, Eye
@@ -868,6 +869,7 @@ function App() {
             case 'history': return t('tradeJournal');
             case 'thoughts': return 'AI 思考日志';
             case 'logs': return t('systemAudit');
+            case 'about': return t('aboutTitle');
             default: return '';
         }
     };
@@ -1243,6 +1245,8 @@ function App() {
                             </div>
                         </div>
                     )}
+
+                    {activeTab === 'about' && <AboutView />}
                 </div>
             </main>
         </div>

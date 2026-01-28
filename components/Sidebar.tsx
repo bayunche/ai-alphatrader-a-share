@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { LayoutDashboard, Settings, History, Activity, FileText, Download, Zap, Languages, LogOut, UserCircle, X, PieChart } from 'lucide-react';
+import { LayoutDashboard, Settings, History, Activity, FileText, Download, Zap, Languages, LogOut, UserCircle, X, PieChart, Info } from 'lucide-react';
 import { useTranslation } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -23,6 +22,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onExp
         { id: 'thoughts', icon: Activity, label: t('thoughts') || 'AI Sense' },
         { id: 'logs', icon: FileText, label: t('logs') },
         { id: 'settings', icon: Settings, label: t('settings') },
+        { id: 'about', icon: Info, label: t('about') },
     ];
 
     const toggleLanguage = () => {

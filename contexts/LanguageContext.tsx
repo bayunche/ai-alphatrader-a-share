@@ -142,7 +142,19 @@ const translations = {
     authError: 'Authentication failed',
     userNotFound: 'User not found',
     userExists: 'User already exists',
-    profile: 'Profile'
+    profile: 'Profile',
+
+    // About
+    about: 'About',
+    aboutTitle: 'About AlphaTrader',
+    version: 'Version',
+    checkUpdate: 'Check for Updates',
+    updateAvailable: 'New version available!',
+    latestVersion: 'You are on the latest version.',
+    updateNow: 'Download Update',
+    checking: 'Checking...',
+    techStack: 'Tech Stack',
+    openSource: 'Open Source'
   },
   zh: {
     // Portfolio
@@ -282,7 +294,19 @@ const translations = {
     authError: '认证失败',
     userNotFound: '用户不存在',
     userExists: '用户已存在',
-    profile: '个人资料'
+    profile: '个人资料',
+
+    // About
+    about: '关于',
+    aboutTitle: '关于 AlphaTrader',
+    version: '版本',
+    checkUpdate: '检查更新',
+    updateAvailable: '有新版本可用！',
+    latestVersion: '已是最新版本',
+    updateNow: '下载更新',
+    checking: '检查中...',
+    techStack: '技术栈',
+    openSource: '开源项目'
   }
 };
 
