@@ -982,7 +982,7 @@ function App() {
                                             </div>
                                             <div className="space-y-1">
                                                 <p className="text-xs text-neutral-500 uppercase tracking-wider">{t('equity')}</p>
-                                                <p className="text-xl font-mono text-white">楼{agent.portfolio.totalEquity.toLocaleString()}</p>
+                                                <p className="text-xl font-mono text-white">¥{agent.portfolio.totalEquity.toLocaleString()}</p>
                                             </div>
                                             <div className="mt-4 pt-4 border-t border-white/5 flex justify-between text-xs text-neutral-400">
                                                 <span className="font-mono">{agent.config.modelName}</span>
@@ -1027,7 +1027,7 @@ function App() {
                                                             {tradeItem.strategyId}
                                                         </span>
                                                     </td>
-                                                    <td className="py-4 text-right pr-4 font-mono text-neutral-300">楼{tradeItem.price.toFixed(2)}</td>
+                                                    <td className="py-4 text-right pr-4 font-mono text-neutral-300">¥{tradeItem.price.toFixed(2)}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -1043,7 +1043,7 @@ function App() {
                                             </div>
                                             <div className="flex justify-between items-center">
                                                 <span className="text-white font-medium">{tradeItem.symbol}</span>
-                                                <span className="text-white font-mono">楼{tradeItem.price.toFixed(2)}</span>
+                                                <span className="text-white font-mono">¥{tradeItem.price.toFixed(2)}</span>
                                             </div>
                                         </div>
                                     ))}
@@ -1182,7 +1182,7 @@ function App() {
                                                     </span>
                                                 </td>
                                                 <td className="py-4 text-neutral-300">{tradeItem.symbol}</td>
-                                                <td className="py-4 font-mono">楼{tradeItem.price.toFixed(2)}</td>
+                                                <td className="py-4 font-mono">¥{tradeItem.price.toFixed(2)}</td>
                                                 <td className="py-4">
                                                     <span className="text-xs border border-white/10 px-2 py-1 rounded bg-black/20 whitespace-nowrap text-neutral-300">
                                                         {tradeItem.strategyId}
@@ -1205,7 +1205,7 @@ function App() {
                                         <div className="flex justify-between items-end mb-4">
                                             <div>
                                                 <div className={`text - lg font - bold ${tradeItem.action === 'BUY' ? 'text-white' : 'text-neutral-500 line-through'} `}>{tradeItem.action} {tradeItem.symbol}</div>
-                                                <div className="text-sm text-neutral-400 font-mono">@ 楼{tradeItem.price.toFixed(2)}</div>
+                                                <div className="text-sm text-neutral-400 font-mono">@ ¥{tradeItem.price.toFixed(2)}</div>
                                             </div>
                                             <div className="text-right">
                                                 <div className="text-xs uppercase tracking-wide text-neutral-500">{t('conf')}</div>
