@@ -21,15 +21,48 @@ const withTimeout = async (promise: Promise<Response>, ms = 8000) => {
 export const sendNotification = async (config: NotificationConfig, trade: TradeExecution) => {
   if (!config.enabled) return;
 
-  const cleanReason = trade.reason ? trade.reason.substring(0, 120) : '';
+  // 格式化原因：保留完整内容，仅做轻量清理
+  const formatReason = (reason: string | undefined): string => {
+    if (!reason) return '—';
+    // 清理多余空白，但保留换行结构
+    return reason.trim().replace(/\n{3,}/g, '\n\n');
+  };
+
+  // 操作标签
+  const actionEmoji = trade.action === 'BUY' ? '🟢' : trade.action === 'SELL' ? '🔴' : '⚪';
+  const actionText = trade.action === 'BUY' ? '买入' : trade.action === 'SELL' ? '卖出' : '持有';
+
+  // 置信度百分比
+  const confidencePercent = trade.confidence ? `${(trade.confidence * 100).toFixed(0)}%` : '—';
+
+  // 纯文本格式消息（用于 Webhook 和简单场景）
   const plainMessage = [
-    '🤖 AlphaTrader 交易提醒',
-    `操作：${trade.action} ${trade.symbol}`,
-    `价格：¥${trade.price.toFixed(2)}`,
-    `数量：${trade.quantity}`,
-    `智能体：${trade.agentName}`,
-    `策略：${trade.strategyId}`,
-    `原因：${cleanReason || '（无）'}`
+    `🤖 AlphaTrader 交易提醒`,
+    `━━━━━━━━━━━━━━━`,
+    `${actionEmoji} 操作：${actionText} ${trade.symbol}`,
+    `💰 价格：¥${trade.price.toFixed(2)}`,
+    `📊 数量：${trade.quantity}`,
+    `🤖 智能体：${trade.agentName}`,
+    `📈 策略：${trade.strategyId}`,
+    `🎯 置信度：${confidencePercent}`,
+    `━━━━━━━━━━━━━━━`,
+    `📝 决策逻辑：`,
+    formatReason(trade.reason)
+  ].join('\n');
+
+  // Telegram Markdown 格式（更美观）
+  const telegramMessage = [
+    `*🤖 AlphaTrader 交易提醒*`,
+    ``,
+    `${actionEmoji} *${actionText}* \`${trade.symbol}\``,
+    `💰 价格：\`¥${trade.price.toFixed(2)}\``,
+    `📊 数量：\`${trade.quantity}\``,
+    `🤖 智能体：${escapeMarkdownV2(trade.agentName)}`,
+    `📈 策略：${escapeMarkdownV2(trade.strategyId)}`,
+    `🎯 置信度：\`${confidencePercent}\``,
+    ``,
+    `📝 *决策逻辑*`,
+    escapeMarkdownV2(formatReason(trade.reason))
   ].join('\n');
 
   const tasks: Promise<any>[] = [];
@@ -38,15 +71,31 @@ export const sendNotification = async (config: NotificationConfig, trade: TradeE
     const url = `https://api.telegram.org/bot${config.telegramBotToken}/sendMessage`;
     const body = {
       chat_id: config.telegramChatId,
-      text: plainMessage
+      text: telegramMessage,
+      parse_mode: 'MarkdownV2'
     };
     tasks.push(
       withTimeout(fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
-      })).then(res => {
-        if (!res.ok) throw new Error(`Telegram ${res.status}`);
+      })).then(async res => {
+        if (!res.ok) {
+          const errBody = await res.text().catch(() => '');
+          // 如果 Markdown 解析失败，回退到纯文本
+          if (errBody.includes('parse') || errBody.includes('entities')) {
+            console.warn('Telegram Markdown parse failed, retry with plain text');
+            return fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: config.telegramChatId,
+                text: plainMessage
+              })
+            });
+          }
+          throw new Error(`Telegram ${res.status}: ${errBody}`);
+        }
       }).catch(e => console.error("Telegram Send Error", e.message || e))
     );
   }
