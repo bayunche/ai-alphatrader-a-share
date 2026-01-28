@@ -1,42 +1,85 @@
 import React, { useState } from 'react';
-import { Github, ExternalLink, RefreshCw, CheckCircle, AlertCircle, Zap, Code, Database, Cpu } from 'lucide-react';
+import { Github, ExternalLink, RefreshCw, CheckCircle, AlertCircle, Zap, Code, Database, Cpu, Download } from 'lucide-react';
 import { useTranslation } from '../contexts/LanguageContext';
-import { checkForUpdate, getCurrentVersion, getGitHubRepoUrl, getReleasesUrl, ReleaseInfo } from '../services/updateService';
+import {
+    checkForUpdate,
+    checkTauriUpdate,
+    installTauriUpdate,
+    getCurrentVersion,
+    getGitHubRepoUrl,
+    getReleasesUrl,
+    isTauriEnv,
+    ReleaseInfo
+} from '../services/updateService';
 
-type UpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'error';
+type UpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'error';
 
 export const AboutView: React.FC = () => {
     const { t } = useTranslation();
     const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
     const [latestRelease, setLatestRelease] = useState<ReleaseInfo | null>(null);
+    const [tauriManifest, setTauriManifest] = useState<any>(null);
     const [errorMsg, setErrorMsg] = useState<string>('');
 
     const currentVersion = getCurrentVersion();
+    const isTauri = isTauriEnv();
 
     const handleCheckUpdate = async () => {
         setUpdateStatus('checking');
         setErrorMsg('');
 
-        const result = await checkForUpdate(currentVersion);
-
-        if (result.error) {
-            setUpdateStatus('error');
-            setErrorMsg(result.error);
-        } else if (result.hasUpdate && result.latestRelease) {
-            setUpdateStatus('available');
-            setLatestRelease(result.latestRelease);
+        if (isTauri) {
+            // 使用 Tauri 原生更新检查
+            const result = await checkTauriUpdate();
+            if (result.error) {
+                setUpdateStatus('error');
+                setErrorMsg(result.error);
+            } else if (result.shouldUpdate && result.manifest) {
+                setUpdateStatus('available');
+                setTauriManifest(result.manifest);
+            } else {
+                setUpdateStatus('latest');
+            }
         } else {
-            setUpdateStatus('latest');
-            setLatestRelease(result.latestRelease);
+            // Web 环境使用 GitHub API
+            const result = await checkForUpdate(currentVersion);
+            if (result.error) {
+                setUpdateStatus('error');
+                setErrorMsg(result.error);
+            } else if (result.hasUpdate && result.latestRelease) {
+                setUpdateStatus('available');
+                setLatestRelease(result.latestRelease);
+            } else {
+                setUpdateStatus('latest');
+                setLatestRelease(result.latestRelease);
+            }
         }
     };
 
-    const handleDownloadUpdate = () => {
-        if (latestRelease?.htmlUrl) {
-            window.open(latestRelease.htmlUrl, '_blank');
+    const handleInstallUpdate = async () => {
+        if (isTauri) {
+            // Tauri 原生自动更新
+            setUpdateStatus('downloading');
+            const result = await installTauriUpdate();
+            if (!result.success) {
+                setUpdateStatus('error');
+                setErrorMsg(result.error || '安装失败');
+            }
+            // 如果成功，应用会自动重启
         } else {
-            window.open(getReleasesUrl(), '_blank');
+            // Web 环境跳转到 GitHub 下载
+            if (latestRelease?.htmlUrl) {
+                window.open(latestRelease.htmlUrl, '_blank');
+            } else {
+                window.open(getReleasesUrl(), '_blank');
+            }
         }
+    };
+
+    const getNewVersion = (): string => {
+        if (tauriManifest?.version) return tauriManifest.version;
+        if (latestRelease?.version) return latestRelease.version;
+        return '';
     };
 
     const techStack = [
@@ -58,6 +101,11 @@ export const AboutView: React.FC = () => {
                 <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 rounded-full">
                     <span className="text-neutral-300 text-sm">{t('version')}</span>
                     <span className="text-white font-mono font-bold">{currentVersion}</span>
+                    {isTauri && (
+                        <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">
+                            Desktop
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -68,7 +116,7 @@ export const AboutView: React.FC = () => {
                 <div className="flex flex-col sm:flex-row items-center gap-4">
                     <button
                         onClick={handleCheckUpdate}
-                        disabled={updateStatus === 'checking'}
+                        disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
                         className="flex items-center gap-2 px-6 py-3 bg-white text-black rounded-xl font-medium hover:bg-neutral-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <RefreshCw className={`w-4 h-4 ${updateStatus === 'checking' ? 'animate-spin' : ''}`} />
@@ -84,22 +132,38 @@ export const AboutView: React.FC = () => {
                             </div>
                         )}
 
-                        {updateStatus === 'available' && latestRelease && (
+                        {updateStatus === 'available' && (
                             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                                 <div className="flex items-center gap-2 text-amber-400">
                                     <AlertCircle className="w-5 h-5" />
                                     <span>{t('updateAvailable')}</span>
                                     <span className="font-mono bg-amber-500/20 px-2 py-0.5 rounded text-sm">
-                                        {latestRelease.version}
+                                        {getNewVersion()}
                                     </span>
                                 </div>
                                 <button
-                                    onClick={handleDownloadUpdate}
+                                    onClick={handleInstallUpdate}
                                     className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-black rounded-lg font-medium hover:bg-amber-400 transition-all text-sm"
                                 >
-                                    <ExternalLink className="w-4 h-4" />
-                                    {t('updateNow')}
+                                    {isTauri ? (
+                                        <>
+                                            <Download className="w-4 h-4" />
+                                            自动更新
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ExternalLink className="w-4 h-4" />
+                                            {t('updateNow')}
+                                        </>
+                                    )}
                                 </button>
+                            </div>
+                        )}
+
+                        {updateStatus === 'downloading' && (
+                            <div className="flex items-center gap-2 text-blue-400">
+                                <RefreshCw className="w-5 h-5 animate-spin" />
+                                <span>正在下载并安装更新...</span>
                             </div>
                         )}
 
@@ -111,6 +175,13 @@ export const AboutView: React.FC = () => {
                         )}
                     </div>
                 </div>
+
+                {/* Auto-update hint for Tauri */}
+                {isTauri && updateStatus === 'idle' && (
+                    <p className="text-neutral-500 text-xs mt-4">
+                        💡 桌面版支持自动更新，检测到新版本后可一键安装
+                    </p>
+                )}
             </div>
 
             {/* Tech Stack Card */}

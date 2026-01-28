@@ -132,17 +132,21 @@ jobs:
       - name: Build frontend
         run: yarn build
 
-      # 构建 Tauri 应用
+      # 构建 Tauri 应用（启用 updater 签名）
       - name: Build Tauri
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
           releaseBody: ''
           releaseDraft: false
           prerelease: false
+          includeUpdaterJson: true
+          updaterJsonKeepUniversal: true
           args: ${{ matrix.tauri-target && format('--target {0}', matrix.tauri-target) || '' }}
 
       - name: Upload artifacts

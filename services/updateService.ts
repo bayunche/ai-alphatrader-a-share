@@ -1,10 +1,10 @@
 /**
- * GitHub Release 更新检查服务
- * 用于检查 GitHub 仓库是否有新版本发布
+ * 更新服务 - 支持 Tauri 原生更新和 GitHub Release 检查
  */
 
 const GITHUB_REPO = 'bayunche/ai-alphatrader-a-share';
 const GITHUB_API_BASE = 'https://api.github.com';
+const CURRENT_VERSION = '1.0.1';
 
 /** Release 信息结构 */
 export interface ReleaseInfo {
@@ -22,9 +22,24 @@ export interface UpdateCheckResult {
     error?: string;
 }
 
+/** Tauri 更新状态 */
+export interface TauriUpdateResult {
+    shouldUpdate: boolean;
+    manifest?: {
+        version: string;
+        date?: string;
+        body?: string;
+    };
+    error?: string;
+}
+
+// 检测是否在 Tauri 环境中运行
+export function isTauriEnv(): boolean {
+    return typeof window !== 'undefined' && '__TAURI__' in window;
+}
+
 /**
  * 比较两个语义化版本号
- * @returns 1 if v1 > v2, -1 if v1 < v2, 0 if equal
  */
 function compareVersions(v1: string, v2: string): number {
     const normalize = (v: string) => v.replace(/^v/, '').split('.').map(Number);
@@ -44,12 +59,60 @@ function compareVersions(v1: string, v2: string): number {
  * 获取当前应用版本号
  */
 export function getCurrentVersion(): string {
-    return '1.0.0'; // 与 package.json 保持同步
+    return CURRENT_VERSION;
 }
 
 /**
- * 检查 GitHub 是否有新版本
- * @param currentVersion 当前版本号
+ * Tauri 原生更新检查
+ */
+export async function checkTauriUpdate(): Promise<TauriUpdateResult> {
+    if (!isTauriEnv()) {
+        return { shouldUpdate: false, error: '非 Tauri 环境' };
+    }
+
+    try {
+        // 动态导入 Tauri API
+        const { checkUpdate } = await import('@tauri-apps/api/updater');
+        const result = await checkUpdate();
+        return {
+            shouldUpdate: result.shouldUpdate,
+            manifest: result.manifest
+        };
+    } catch (error: any) {
+        console.error('Tauri update check failed:', error);
+        return { shouldUpdate: false, error: error?.message || '更新检查失败' };
+    }
+}
+
+/**
+ * Tauri 原生安装更新并重启
+ */
+export async function installTauriUpdate(
+    onProgress?: (downloaded: number, total: number | null) => void
+): Promise<{ success: boolean; error?: string }> {
+    if (!isTauriEnv()) {
+        return { success: false, error: '非 Tauri 环境' };
+    }
+
+    try {
+        const { installUpdate } = await import('@tauri-apps/api/updater');
+        const { relaunch } = await import('@tauri-apps/api/process');
+
+        // 安装更新（会自动下载）
+        await installUpdate();
+
+        // 重启应用以完成更新
+        await relaunch();
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('Tauri update install failed:', error);
+        return { success: false, error: error?.message || '安装更新失败' };
+    }
+}
+
+/**
+ * 检查 GitHub 是否有新版本（Web 回退方案）
  */
 export async function checkForUpdate(currentVersion?: string): Promise<UpdateCheckResult> {
     const version = currentVersion || getCurrentVersion();
@@ -60,13 +123,11 @@ export async function checkForUpdate(currentVersion?: string): Promise<UpdateChe
             {
                 headers: {
                     Accept: 'application/vnd.github.v3+json',
-                    // 注意：未认证请求限制为 60 次/小时
                 },
             }
         );
 
         if (response.status === 404) {
-            // 没有发布过 Release
             return { hasUpdate: false, latestRelease: null };
         }
 
@@ -92,7 +153,7 @@ export async function checkForUpdate(currentVersion?: string): Promise<UpdateChe
         return {
             hasUpdate: false,
             latestRelease: null,
-            error: error?.message || 'Failed to check for updates',
+            error: error?.message || '无法检查更新',
         };
     }
 }
