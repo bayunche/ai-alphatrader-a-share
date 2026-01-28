@@ -39,3 +39,19 @@ src-tauri/bin/
 coverage
 *.pid
 tmp
+
+# Tauri signing keys (NEVER commit these!)
+~/.tauri/
+**/~/.tauri/
+*.key
+*.key.pub
+alphatrader.key*
+
+# Debug files
+debug_*.py
+debug_*.js
+
+# Python artifacts
+__pycache__/
+*.pyc
+.venv/
