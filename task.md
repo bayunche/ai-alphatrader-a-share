@@ -36,3 +36,11 @@
 - [x] **体验优化**: 拦截 `mock-broker.com` 虚拟地址的请求，避免控制台报错。 <!-- id: 16 -->
 - [x] **性能修复**: 修复导致 `ERR_INSUFFICIENT_RESOURCES` 的行情轮询无限死循环问题。 <!-- id: 17 -->
 - [x] 编写交付文档 `docs/release_guide.md`。 <!-- id: 9 -->
+
+## 5. AI 上下文与连接性增强 (Using)
+- [x] **Backend Proxy**: 实现 `/api/proxy` 解决 Ollama/Gemini CORS 问题。
+- [x] **Trading Lots**: 提示词明确“1手=100股”规则。
+- [x] **Intraday Volume Ratio**: 实现分钟级精准量比计算 (vs 5日均量)。
+- [x] **Strategy History**: 在持仓中记录并向 AI 提供建仓策略名。
+- [x] **Extended History**: 将 K 线历史数据从 10 天增加到 30 天。
+- [x] **Volatility & PV Analysis**: 增加 10 日波动率和量价相关性指标。

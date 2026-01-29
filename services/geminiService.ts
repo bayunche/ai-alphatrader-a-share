@@ -7,30 +7,82 @@ import { AIConfig, MarketData, PortfolioState, AIResponse, TradeAction } from ".
 import { KLineData } from "../types";
 import { dataApi } from "./api";
 
-const SYSTEM_PROMPT = (marketData: MarketData, portfolio: PortfolioState, lang: 'en' | 'zh', history: KLineData[] = []) => {
+const SYSTEM_PROMPT = (marketData: MarketData, portfolio: PortfolioState, lang: 'en' | 'zh', history: KLineData[] = [], tradingMinutes: number = 240) => {
   const currentPosition = portfolio.positions.find(p => p.symbol === marketData.symbol);
   const cost = currentPosition?.averageCost || 0;
   const pnlPct = currentPosition?.pnlPercentage || 0;
   const holdingQty = currentPosition?.quantity || 0;
   const holdingValue = currentPosition?.marketValue || 0;
+  const lastStrategy = currentPosition?.lastStrategy || '无';
   const exposurePct = portfolio.totalEquity > 0 ? (holdingValue / portfolio.totalEquity * 100) : 0;
 
-  // 计算历史数据统计
+  // 计算历史数据统计 (Using last 10 days for better volatility/correlation)
+  const last10d = history.slice(-10);
   const last5d = history.slice(-5);
+
   const avgVolume5d = last5d.length > 0 ? last5d.reduce((a, h) => a + h.volume, 0) / last5d.length : 0;
   const avgChange5d = last5d.length > 0 ? last5d.reduce((a, h) => a + h.change_pct, 0) / last5d.length : 0;
-  const volatility5d = last5d.length > 1
-    ? Math.sqrt(last5d.reduce((a, h) => a + Math.pow(h.change_pct - avgChange5d, 2), 0) / (last5d.length - 1))
+
+  // Historical Volatility (Standard Deviation of Daily Returns over 10 days)
+  const avgChange10d = last10d.length > 0 ? last10d.reduce((a, h) => a + h.change_pct, 0) / last10d.length : 0;
+  const volatility10d = last10d.length > 1
+    ? Math.sqrt(last10d.reduce((a, h) => a + Math.pow(h.change_pct - avgChange10d, 2), 0) / (last10d.length - 1))
     : 0;
 
-  // 格式化历史（最近 5 日）
-  const historyStr = history.slice(-5).map(h =>
+  // Price-Volume Correlation (Pearson Correlation over 10 days)
+  // Correlate Price Change% with Volume Change%
+  let pvCorrelation = 0;
+  if (last10d.length > 2) {
+    const volChanges: number[] = [];
+    const priceChanges: number[] = [];
+    for (let i = 1; i < last10d.length; i++) {
+      const volChg = (last10d[i].volume - last10d[i - 1].volume) / last10d[i - 1].volume;
+      priceChanges.push(last10d[i].change_pct);
+      volChanges.push(volChg);
+    }
+
+    const n = priceChanges.length;
+    const sumX = priceChanges.reduce((a, b) => a + b, 0);
+    const sumY = volChanges.reduce((a, b) => a + b, 0);
+    const sumXY = priceChanges.reduce((sum, x, i) => sum + x * volChanges[i], 0);
+    const sumX2 = priceChanges.reduce((sum, x) => sum + x * x, 0);
+    const sumY2 = volChanges.reduce((sum, y) => sum + y * y, 0);
+
+    const numerator = n * sumXY - sumX * sumY;
+    const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+    pvCorrelation = denominator === 0 ? 0 : numerator / denominator;
+  }
+
+  // 格式化历史（最近 10 日）
+  const historyStr = history.slice(-10).map(h =>
     `${h.date}: O=${h.open} C=${h.close} H=${h.high} L=${h.low} Vol=${(h.volume / 10000).toFixed(0)}w Chg=${h.change_pct}%`
   ).join('\n');
 
   // 当日涨跌状态
   const dayTrend = marketData.change > 0 ? '上涨' : marketData.change < 0 ? '下跌' : '持平';
-  const volumeRatio = avgVolume5d > 0 ? (marketData.volume / avgVolume5d).toFixed(2) : 'N/A';
+
+  // PV Analysis Interaction
+  let pvAnalysis = '量价配合一般';
+  if (pvCorrelation > 0.6) pvAnalysis = '量价齐升/齐跌 (趋势增强)';
+  else if (pvCorrelation < -0.6) pvAnalysis = '量价背离 (趋势反转风险)';
+  else if (pvCorrelation > 0.2) pvAnalysis = '量价轻微同步';
+  else if (pvCorrelation < -0.2) pvAnalysis = '量价轻微背离';
+
+  // 量比计算 (Intraday Volume Ratio)
+  // 量比 = (当前成交量 / 过去5日平均每分钟成交量 * 当前累计开市分钟数) [简化版]
+  // 标准公式 = (当前累计成交量 / 累计开市分钟数) / (过去5日日均成交量 / 240)
+  let volumeRatio = 'N/A';
+  if (avgVolume5d > 0) {
+    const pastAvgPerMin = avgVolume5d / 240;
+    const currentPerMin = tradingMinutes > 0 ? marketData.volume / tradingMinutes : 0;
+    // 避免除零和开盘瞬间极大值
+    if (tradingMinutes > 1 && pastAvgPerMin > 0) {
+      volumeRatio = (currentPerMin / pastAvgPerMin).toFixed(2);
+    } else if (tradingMinutes >= 240) {
+      // 收盘后直接由总量比
+      volumeRatio = (marketData.volume / avgVolume5d).toFixed(2);
+    }
+  }
 
   // 趋势分析（20 tick）
   const trendData = marketData.trend || [];
@@ -50,17 +102,19 @@ LANGUAGE: reasoning 和 strategyName 字段请使用${lang === 'zh' ? '中文' :
 ═══════════════════════════════════════
 • 当前价格：¥${marketData.price.toFixed(2)}
 • 今日涨跌：${marketData.change.toFixed(2)}% (${dayTrend})
-• 今日成交：${(marketData.volume / 100).toFixed(0)} 手
-• 量比（vs 5日均量）：${volumeRatio}x
+• 今日成交：${(marketData.volume / 100).toFixed(0)} 手 (Vol)
+• 开盘时长：${tradingMinutes} 分钟
+• 量比 (Volume Ratio)：${volumeRatio}x (vs 5日均量)
 • 短期趋势（20tick）：${trendDirection}，变化 ${trendPctChange}%
+• 量价相关性 (10d)：${pvCorrelation.toFixed(2)} (${pvAnalysis})
 
 ═══════════════════════════════════════
-📊 近 5 日 K 线数据
+📊 近 10 日 K 线数据
 ═══════════════════════════════════════
 ${historyStr || '暂无历史数据'}
 
 • 5日平均涨跌：${avgChange5d.toFixed(2)}%
-• 5日波动率：${volatility5d.toFixed(2)}%
+• 10日波动率 (Volatility)：${volatility10d.toFixed(2)}%
 
 ═══════════════════════════════════════
 💼 组合与持仓状态
@@ -71,26 +125,28 @@ ${historyStr || '暂无历史数据'}
 • 当前持仓（${marketData.symbol}）：${holdingQty} 股
 • 持仓成本：¥${cost.toFixed(2)}
 • 浮动盈亏：${pnlPct.toFixed(2)}%
+• 建仓策略：${lastStrategy}
 • 该标仓位占比：${exposurePct.toFixed(1)}%
 
 ═══════════════════════════════════════
-⚠️ 风控规则（系统强制执行）
+⚠️ 风控与交易规则（系统强制执行）
 ═══════════════════════════════════════
-• 置信度 < 85% 的信号会被系统过滤，不会执行
-• 同标的最近 5 分钟内交易过则进入冷却期
-• 单标的最大仓位不超过总资产的 60%
-• 你的决策应谨慎，只有高置信度机会才值得交易
+1. **交易单位 (Lots)**: A股交易必须以“手”为单位，**1手 = 100股**。建议买入数量必须是 100 的整数倍。
+2. **量比分析**: 量比 > 1.5 表示放量，< 0.8 表示缩量。放量上涨通常更可靠。
+3. **置信度**: < 85% 的信号会被过滤。
+4. **冷却期**: 同标的 5 分钟内不重复交易。
+5. **仓位控制**: 单标的不超过总资产 60%。
 
 ═══════════════════════════════════════
 🎯 决策任务
 ═══════════════════════════════════════
-1. 综合分析：价格趋势、量价关系、历史波动、持仓状态
-2. 评估风险：当前仓位、盈亏状况、市场情绪
+1. 综合分析：价格趋势、量价关系（重点关注量比）、历史波动
+2. 评估风险：当前仓位、盈亏状况
 3. 做出决策：BUY / SELL / HOLD
-4. 给出置信度：0.0-1.0（低于 0.85 会被忽略）
-5. 建议仓位比例：0-100（占可用资金或持仓的百分比）
-6. 命名策略：如"量价突破"、"超跌反弹"、"止盈减仓"等
-7. 详细说明：解释你的交易逻辑
+4. 给出置信度：0.0-1.0
+5. **建议仓位**: 0-100% (占可用资金或持仓的比例)。系统会自动向下取整为 100 股的倍数。
+6. 命名策略：如"放量突破"、"缩量回调"等
+7. 详细说明：解释逻辑，请在分析中**需明确提到“量比”和“手数”**。
 
 JSON 输出格式：
 {
@@ -197,10 +253,11 @@ export const analyzeMarket = async (
   portfolio: PortfolioState,
   config: AIConfig,
   lang: 'en' | 'zh' = 'zh',
-  history: KLineData[] = []
+  history: KLineData[] = [],
+  tradingMinutes: number = 240
 ): Promise<AIResponse> => {
 
-  const prompt = SYSTEM_PROMPT(marketData, portfolio, lang, history);
+  const prompt = SYSTEM_PROMPT(marketData, portfolio, lang, history, tradingMinutes);
 
   try {
     if (config.provider === 'GEMINI') {

@@ -42,6 +42,32 @@ const isTradingTimeNow = () => {
     return morning || afternoon;
 };
 
+// 计算当日开盘分钟数 (0-240)
+const calculateTradingMinutes = () => {
+    const now = getShanghaiNow();
+    const day = now.getDay();
+    if (day === 0 || day === 6) return 240; // 周末视作已收盘
+
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    const morningStart = 9 * 60 + 30; // 570
+    const morningEnd = 11 * 60 + 30;  // 690
+    const afternoonStart = 13 * 60;   // 780
+
+    if (minutes < morningStart) return 0;
+    if (minutes >= morningStart && minutes <= morningEnd) {
+        return minutes - morningStart;
+    }
+    if (minutes > morningEnd && minutes < afternoonStart) {
+        return 120; // 中午休市视作 120 分钟
+    }
+    if (minutes >= afternoonStart) {
+        const pmMins = minutes - afternoonStart;
+        const total = 120 + pmMins;
+        return Math.min(240, total); // 最高240
+    }
+    return 0;
+};
+
 function App() {
     const { user } = useAuth();
     const { t, language } = useTranslation();
@@ -328,12 +354,14 @@ function App() {
                         currentPrice: execPrice,
                         marketValue: totalQty * execPrice,
                         pnl: (execPrice - (totalCost / totalQty)) * totalQty,
-                        pnlPercentage: 0
+                        pnlPercentage: 0,
+                        lastStrategy: strategyName // 记录策略名
                     };
                 } else {
                     newPositions.push({
                         symbol, quantity: actualQuantity, averageCost: execPrice, currentPrice: execPrice,
-                        marketValue: tradeAmount, pnl: 0, pnlPercentage: 0
+                        marketValue: tradeAmount, pnl: 0, pnlPercentage: 0,
+                        lastStrategy: strategyName // 记录策略名
                     });
                 }
             } else if (action === TradeAction.SELL) {
@@ -407,7 +435,7 @@ function App() {
                 // Fetch History Context Concurrently (Optional but recommended)
                 let history: any[] = [];
                 try {
-                    history = await fetchStockHistory(stock.symbol, 10);
+                    history = await fetchStockHistory(stock.symbol, 30);
                 } catch (e) {
                     console.warn(`Failed to fetch history for ${stock.symbol}`, e);
                 }
@@ -420,8 +448,10 @@ function App() {
                         return;
                     }
 
-                    // Pass history to analyzeMarket
-                    analyzeMarket(stock, agent.portfolio, agent.config, language, history).then(decision => {
+                    const tradingMinutes = calculateTradingMinutes(); // 获取 Intraday 分钟数
+
+                    // Pass history and tradingMinutes
+                    analyzeMarket(stock, agent.portfolio, agent.config, language, history, tradingMinutes).then(decision => {
                         const risk = riskConfigRef.current;
                         const now = Date.now();
                         const cooldownKey = `${agent.id}:${stock.symbol}`;

@@ -51,6 +51,7 @@ export interface PortfolioPosition {
   marketValue: number;
   pnl: number;
   pnlPercentage: number;
+  lastStrategy?: string; // 记录上次操作该持仓的策略名称
 }
 
 export interface PortfolioState {
