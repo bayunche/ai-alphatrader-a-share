@@ -103,5 +103,35 @@ export const dataApi = {
             localStorage.setItem(`alpha_trader_${userId}_logs`, JSON.stringify(workspace.logs));
             localStorage.setItem(`alpha_trader_${userId}_pools`, JSON.stringify(workspace.stockPools));
         }
+    },
+
+    proxyRequest: async (url: string, options: { method?: string, headers?: any, body?: any } = {}): Promise<any> => {
+        try {
+            // Check if backend is available by trying the proxy endpoint
+            const res = await fetch(`${API_BASE}/proxy`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url,
+                    method: options.method || 'GET',
+                    headers: options.headers || {},
+                    body: options.body
+                })
+            });
+            if (!res.ok) {
+                // Try to read error text
+                const errText = await res.text();
+                throw new Error(`Proxy Error ${res.status}: ${errText}`);
+            }
+            // Attempt to parse JSON; if not JSON, return text
+            const contentType = res.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                return await res.json();
+            }
+            return await res.text();
+        } catch (e) {
+            console.error("Proxy Request Failed", e);
+            throw e;
+        }
     }
 };

@@ -5,6 +5,7 @@ import { AIConfig, MarketData, PortfolioState, AIResponse, TradeAction } from ".
 // --- Shared Logic ---
 
 import { KLineData } from "../types";
+import { dataApi } from "./api";
 
 const SYSTEM_PROMPT = (marketData: MarketData, portfolio: PortfolioState, lang: 'en' | 'zh', history: KLineData[] = []) => {
   const currentPosition = portfolio.positions.find(p => p.symbol === marketData.symbol);
@@ -140,28 +141,41 @@ const fetchOpenAICompatible = async (config: AIConfig, prompt: string): Promise<
     headers["Authorization"] = `Bearer ${config.apiKey}`;
   }
 
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: config.modelName,
-        messages: [
-          { role: "system", content: "You are a JSON-speaking trading bot." },
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.7,
-        // Ollama often supports format: "json"
-        response_format: { type: "json_object" }
-      }),
-    });
+  const payload = {
+    model: config.modelName,
+    messages: [
+      { role: "system", content: "You are a JSON-speaking trading bot." },
+      { role: "user", content: prompt }
+    ],
+    temperature: 0.7,
+    // Ollama often supports format: "json"
+    response_format: { type: "json_object" }
+  };
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`API Error ${response.status}: ${errText}`);
+  try {
+    let data;
+    if (config.provider === 'OLLAMA') {
+      // Use Backend Proxy to avoid CORS
+      data = await dataApi.proxyRequest(url, {
+        method: "POST",
+        headers,
+        body: payload
+      });
+    } else {
+      // Direct Fetch for others (OpenAI remote, etc.)
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`API Error ${response.status}: ${errText}`);
+      }
+      data = await response.json();
     }
 
-    const data = await response.json();
     const content = data.choices?.[0]?.message?.content || "{}";
 
     // Robust JSON parsing for models that might wrap in markdown
@@ -190,21 +204,37 @@ export const analyzeMarket = async (
 
   try {
     if (config.provider === 'GEMINI') {
-      const genAI = createGeminiClient(config.apiEndpoint, config.apiKey);
+      // Use Backend Proxy for Gemini to bypass CORS/GFW
+      const baseUrl = (config.apiEndpoint && config.apiEndpoint.trim() !== '')
+        ? config.apiEndpoint.replace(/\/+$/, '')
+        : 'https://generativelanguage.googleapis.com';
 
       let modelId = config.modelName || 'gemini-2.5-flash';
+      const url = `${baseUrl}/v1beta/models/${modelId}:generateContent?key=${config.apiKey}`;
 
-      const response = await genAI.models.generateContent({
-        model: modelId,
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: geminiResponseSchema,
-          temperature: 0.7,
+      const payload = {
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          response_mime_type: "application/json",
+          response_schema: geminiResponseSchema,
+          temperature: 0.7
         }
+      };
+
+      const data = await dataApi.proxyRequest(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: payload
       });
 
-      const text = response.text;
+      // Handle Gemini Response Structure
+      // { candidates: [ { content: { parts: [ { text: "..." } ] } } ] }
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
       if (!text) throw new Error("Empty Gemini response");
       return JSON.parse(text);
 

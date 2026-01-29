@@ -130,6 +130,43 @@ db.exec(
 
 // --- Routes ---
 
+// Generic Proxy for AI Services (Ollama/Local) to bypass CORS
+app.post('/api/proxy', async (req, res) => {
+  const { url, method = 'GET', headers = {}, body } = req.body;
+  if (!url) return res.status(400).json({ success: false, error: 'Missing url' });
+
+  // Basic security: only allow local or specific protocols if needed
+  // For now, allow http/https
+  try {
+    const fetchOptions = {
+      method,
+      headers: { ...headers }
+    };
+
+    // Remove host header to avoid conflicts
+    delete fetchOptions.headers['host'];
+    delete fetchOptions.headers['content-length'];
+
+    if (method !== 'GET' && method !== 'HEAD' && body) {
+      fetchOptions.body = typeof body === 'string' ? body : JSON.stringify(body);
+    }
+
+    const resp = await fetch(url, fetchOptions);
+    const contentType = resp.headers.get('content-type');
+
+    if (contentType && contentType.includes('application/json')) {
+      const data = await resp.json();
+      res.status(resp.status).json(data);
+    } else {
+      const text = await resp.text();
+      res.status(resp.status).send(text);
+    }
+  } catch (e) {
+    console.error(`[Proxy] Error fetching ${url}:`, e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // Login // History Data Proxy
 app.get('/api/history', async (req, res) => {
   const { symbol, days } = req.query;

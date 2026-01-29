@@ -1,4 +1,5 @@
 import { AIConfig, BrokerConfig } from '../types';
+import { dataApi } from './api';
 
 const abortableFetch = async (input: RequestInfo, init: RequestInit = {}, timeoutMs = 5000) => {
   const controller = new AbortController();
@@ -44,10 +45,13 @@ const checkOllama = async (endpoint: string, modelName?: string): Promise<Health
   if (!endpoint) return { ok: false, reason: '缺少 Ollama 地址' };
   try {
     const url = `${endpoint.replace(/\/+$/, '')}/api/tags`;
-    const res = await abortableFetch(url, { method: 'GET' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    // Use Proxy
+    const json = await dataApi.proxyRequest(url, { method: 'GET' });
+
+    // proxyRequest parses JSON automatically if content-type is json
+    // Ollama API returns JSON for tags
+
     if (modelName && modelName.trim() !== '') {
-      const json = await res.json();
       const tags = Array.isArray(json?.models) ? json.models : [];
       const exists = tags.some((m: any) => m.name === modelName || m.model === modelName);
       if (!exists) throw new Error(`未找到模型 ${modelName}`);
@@ -62,14 +66,13 @@ const checkGemini = async (endpoint?: string, apiKey?: string, modelName?: strin
   if (!apiKey) return { ok: false, reason: '缺少 Gemini API Key' };
   const base = (endpoint && endpoint.trim() !== '') ? endpoint.replace(/\/+$/, '') : 'https://generativelanguage.googleapis.com';
   try {
-    const listUrl = `${base}/v1/models?key=${apiKey}`;
-    const listRes = await abortableFetch(listUrl, { method: 'GET' });
-    if (!listRes.ok) throw new Error(`HTTP ${listRes.status}`);
+    const listUrl = `${base}/v1beta/models?key=${apiKey}`;
+    // Use Proxy
+    await dataApi.proxyRequest(listUrl, { method: 'GET' });
 
     if (modelName && modelName.trim() !== '') {
-      const modelUrl = `${base}/v1/models/${modelName}?key=${apiKey}`;
-      const modelRes = await abortableFetch(modelUrl, { method: 'GET' });
-      if (!modelRes.ok) throw new Error(`模型不可用 (${modelName})`);
+      const modelUrl = `${base}/v1beta/models/${modelName}?key=${apiKey}`;
+      await dataApi.proxyRequest(modelUrl, { method: 'GET' });
     }
     return { ok: true };
   } catch (e: any) {
