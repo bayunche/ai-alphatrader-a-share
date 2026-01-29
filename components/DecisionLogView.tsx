@@ -77,7 +77,7 @@ export function DecisionLogView({ decisions }: DecisionLogViewProps) {
                         <div key={record.id} className="bg-black/20 hover:bg-black/40 border border-white/5 hover:border-purple-500/20 rounded-lg p-3 transition-all flex flex-col gap-2">
                             <div className="flex items-center justify-between text-xs">
                                 <div className="flex items-center gap-2 text-neutral-400">
-                                    <span className="font-mono text-neutral-500">{record.timestamp.split('T')[1].split('.')[0]}</span>
+                                    <span className="font-mono text-neutral-500">{new Date(record.timestamp).toLocaleTimeString(undefined, { hour12: false })}</span>
                                     <span className="px-1.5 py-0.5 rounded bg-white/5 text-neutral-300">{record.agentName}</span>
                                     <span>#{record.symbol}</span>
                                 </div>

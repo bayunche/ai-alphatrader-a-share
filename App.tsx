@@ -1202,7 +1202,7 @@ function App() {
                                     <tbody className="divide-y divide-white/5">
                                         {tradeHistory.map(tradeItem => (
                                             <tr key={tradeItem.id} className="group hover:bg-white/5 transition-colors">
-                                                <td className="py-4 pl-2 font-mono text-xs">{tradeItem.timestamp.replace('T', ' ').split('.')[0]}</td>
+                                                <td className="py-4 pl-2 font-mono text-xs">{new Date(tradeItem.timestamp).toLocaleString(undefined, { hour12: false })}</td>
                                                 <td className="py-4 text-white font-medium">{tradeItem.agentName}</td>
                                                 <td className="py-4">
                                                     <span className={`font - bold ${tradeItem.action === 'BUY' ? 'text-white' : 'text-neutral-500 line-through'} `}>
@@ -1227,7 +1227,7 @@ function App() {
                                 {tradeHistory.map(tradeItem => (
                                     <div key={tradeItem.id} className="bg-white/5 rounded-2xl p-5 border border-white/5">
                                         <div className="flex justify-between items-center mb-3">
-                                            <span className="text-xs text-neutral-500">{tradeItem.timestamp.replace('T', ' ').split('.')[0]}</span>
+                                            <span className="text-xs text-neutral-500">{new Date(tradeItem.timestamp).toLocaleString(undefined, { hour12: false })}</span>
                                             <span className="text-xs font-medium text-neutral-300">{tradeItem.agentName}</span>
                                         </div>
                                         <div className="flex justify-between items-end mb-4">
@@ -1257,7 +1257,7 @@ function App() {
                                 {logs.map(log => (
                                     <div key={log.id} className="flex flex-col md:flex-row md:gap-4 border-b border-white/5 pb-1.5 hover:bg-white/5 px-2 rounded transition-colors">
                                         <div className="flex gap-2 md:w-48 shrink-0">
-                                            <span className="text-neutral-600 select-none">{log.timestamp.split('T')[1]}</span>
+                                            <span className="text-neutral-600 select-none">{new Date(log.timestamp).toLocaleTimeString(undefined, { hour12: false })}</span>
                                             <span className={`font - bold ${log.type === 'ERROR' ? 'text-white bg-red-900/50 px-1 rounded' :
                                                 log.type === 'TRADE' ? 'text-white' :
                                                     log.type === 'POOL' ? 'text-blue-400' :
