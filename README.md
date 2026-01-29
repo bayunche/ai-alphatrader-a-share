@@ -117,6 +117,11 @@ The system includes built-in risk controls:
 - **Position Limits**: Max 60% of portfolio in a single stock
 - **Slippage Protection**: Abort trades exceeding tolerance
 
+### Notification
+
+Supported channels: Telegram, Webhook.
+👉 [Telegram Configuration Guide](docs/telegram_config.md)
+
 ## Project Structure
 
 ```

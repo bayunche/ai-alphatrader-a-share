@@ -117,6 +117,11 @@ VITE_FORCE_BACKEND=true
 - **仓位限制**：单标的最大持仓不超过总资产 60%
 - **滑点保护**：超出容忍度的交易自动放弃
 
+### 消息通知
+
+支持渠道：Telegram, Webhook。
+👉 [Telegram 配置指南 (中文)](docs/telegram_config.md)
+
 ## 项目结构
 
 ```
