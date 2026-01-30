@@ -75,7 +75,8 @@ jobs:
       - name: Install Python dependencies
         run: |
           ${{ matrix.python-cmd }} -m pip install --upgrade pip
-          ${{ matrix.python-cmd }} -m pip install pyinstaller akshare
+          ${{ matrix.python-cmd }} -m pip install pyinstaller
+          ${{ matrix.python-cmd }} -m pip install -r server/requirements.txt
 
       # 修改 beforeBuildCommand，CI 中所有构建已完成，禁用 beforeBuildCommand
       - name: Prepare Tauri config for CI

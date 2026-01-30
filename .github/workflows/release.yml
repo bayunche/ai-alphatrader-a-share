@@ -98,7 +98,8 @@ jobs:
       - name: Install Python dependencies
         run: |
           ${{ matrix.python-cmd }} -m pip install --upgrade pip
-          ${{ matrix.python-cmd }} -m pip install pyinstaller akshare
+          ${{ matrix.python-cmd }} -m pip install pyinstaller
+          ${{ matrix.python-cmd }} -m pip install -r server/requirements.txt
 
       # 更新版本号到 Tag 版本
       - name: Update version
@@ -139,6 +140,7 @@ jobs:
             --onefile \
             --name akshare_service \
             --collect-all akshare \
+            --hidden-import flask \
             --hidden-import pandas \
             --hidden-import numpy \
             --hidden-import requests \
