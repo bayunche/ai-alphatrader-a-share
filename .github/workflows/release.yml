@@ -73,7 +73,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '18'
           cache: 'yarn'
 
       - name: Setup Python
@@ -122,11 +122,7 @@ jobs:
           # 更新 Cargo.toml
           sed -i.bak "s/^version = .*/version = \"$VERSION\"/" src-tauri/Cargo.toml
 
-      # 构建 Node.js 服务
-      - name: Rebuild sqlite3 for Node 18
-        run: |
-          # pkg 默认包含 Node 18.5.0，强制为该版本构建原生绑定
-          npm rebuild sqlite3 --target=18.5.0 --target_arch=x64 --target_platform=win32 --build-from-source
+
 
       - name: Build Node server
         shell: bash
