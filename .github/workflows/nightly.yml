@@ -92,7 +92,13 @@ jobs:
 
 
       
-      # Node Server 构建由 yarn build -> bundle-server.cjs 处理，无需显式调用 pkg
+      # Node Server 构建由 yarn build:server (bundle-server.cjs) 处理
+      - name: Build Node server
+        shell: bash
+        run: |
+          yarn build:server
+          echo "Server bundled and Node binary prepared:"
+          ls -la src-tauri/bin/
 
       # 构建 Python akshare 服务
       - name: Build akshare service
