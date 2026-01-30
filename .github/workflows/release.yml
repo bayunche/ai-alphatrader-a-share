@@ -165,7 +165,7 @@ jobs:
         shell: bash
         run: |
           echo "=== Sidecar binaries in src-tauri/bin/ ==="
-          ls -la src-tauri/bin/
+          ls -lh src-tauri/bin/
           echo ""
           echo "=== Checking required files ==="
           # Check for Node sidecar
@@ -178,12 +178,30 @@ jobs:
             echo "ERROR: Bundled server script not found!"
             exit 1
           fi
+          # Check for sqlite3 native module
+          if [ ! -d "src-tauri/resources/server/node_modules/sqlite3" ]; then
+            echo "ERROR: sqlite3 module not found!"
+            exit 1
+          fi
+          # Check for schema.sql
+          if [ ! -f "src-tauri/resources/server/schema.sql" ]; then
+            echo "ERROR: schema.sql not found!"
+            exit 1
+          fi
           
           if [ ! -f "src-tauri/bin/akshare_service-${{ matrix.rust-target }}${{ matrix.exe-suffix }}" ]; then
             echo "ERROR: akshare_service sidecar not found!"
             exit 1
           fi
-          echo "All sidecar binaries verified successfully!"
+          echo ""
+          echo "=== Resources directory structure ==="
+          find src-tauri/resources -type f | head -50
+          echo ""
+          echo "=== Resources size summary ==="
+          du -sh src-tauri/resources/
+          du -sh src-tauri/bin/
+          echo ""
+          echo "All sidecar binaries and resources verified successfully!"
 
       # 构建前端
       - name: Build frontend
@@ -228,6 +246,26 @@ jobs:
           echo ""
           echo "=== Bundle directory ==="
           ls -lhR src-tauri/target/release/bundle/ 2>/dev/null || ls -lhR src-tauri/target/*/release/bundle/ 2>/dev/null || echo "Bundle not found"
+          
+          # Windows 安装包大小验证 (应该 > 100MB 才包含完整后端)
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            echo ""
+            echo "=== Windows installer size check ==="
+            INSTALLER=$(find src-tauri/target -name "*setup.exe" 2>/dev/null | head -1)
+            if [ -n "$INSTALLER" ]; then
+              SIZE_BYTES=$(stat -c%s "$INSTALLER" 2>/dev/null || stat -f%z "$INSTALLER" 2>/dev/null || echo 0)
+              SIZE_MB=$((SIZE_BYTES / 1024 / 1024))
+              echo "Installer: $INSTALLER"
+              echo "Size: ${SIZE_MB}MB"
+              if [ "$SIZE_MB" -lt 100 ]; then
+                echo "WARNING: Installer size ${SIZE_MB}MB is less than 100MB!"
+                echo "This may indicate missing backend resources."
+                echo "Expected size: > 100MB (node.exe ~70MB + akshare ~40MB + app)"
+              else
+                echo "Installer size OK: ${SIZE_MB}MB"
+              fi
+            fi
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

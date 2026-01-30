@@ -19,7 +19,7 @@
         "sidecar": true,
         "scope": [
           {
-            "name": "bin/server",
+            "name": "bin/node",
             "sidecar": true
           },
           {
@@ -80,13 +80,11 @@
         "bin/node",
         "bin/akshare_service"
       ],
-      "resources": [
-        "resources/**/*"
-      ],
       "icon": [
         "icons/icon.ico"
       ],
       "resources": [
+        "resources/**/*",
         "../assets/desktop_icon_rgba.png",
         "../assets/tray_icon_rgba.png"
       ]
