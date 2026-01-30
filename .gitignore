@@ -55,3 +55,4 @@ debug_*.js
 __pycache__/
 *.pyc
 .venv/
+ci-test/
