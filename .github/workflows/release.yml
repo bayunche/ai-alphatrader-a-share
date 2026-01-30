@@ -134,11 +134,30 @@ jobs:
       - name: Build akshare service
         shell: bash
         run: |
-          ${{ matrix.python-cmd }} -m PyInstaller --onefile --name akshare_service server/akshare_service.py
+          # 使用 --collect-all 确保 akshare 及其所有依赖被完整打包
+          ${{ matrix.python-cmd }} -m PyInstaller \
+            --onefile \
+            --name akshare_service \
+            --collect-all akshare \
+            --hidden-import pandas \
+            --hidden-import numpy \
+            --hidden-import requests \
+            --hidden-import lxml \
+            --hidden-import bs4 \
+            --hidden-import html5lib \
+            --hidden-import urllib3 \
+            --hidden-import charset_normalizer \
+            server/akshare_service.py
           mv dist/akshare_service${{ matrix.exe-suffix }} src-tauri/bin/akshare_service-${{ matrix.rust-target }}${{ matrix.exe-suffix }}
           chmod +x src-tauri/bin/akshare_service-${{ matrix.rust-target }}${{ matrix.exe-suffix }} || true
-          echo "Akshare binary built:"
-          ls -la src-tauri/bin/
+          echo "=== Akshare binary built ==="
+          ls -lh src-tauri/bin/
+          # 验证文件大小（应该至少 100MB，否则依赖缺失）
+          SIZE=$(stat -f%z src-tauri/bin/akshare_service-${{ matrix.rust-target }}${{ matrix.exe-suffix }} 2>/dev/null || stat -c%s src-tauri/bin/akshare_service-${{ matrix.rust-target }}${{ matrix.exe-suffix }})
+          echo "Akshare service size: $SIZE bytes"
+          if [ "$SIZE" -lt 100000000 ]; then
+            echo "WARNING: akshare_service seems too small (< 100MB), dependencies may be missing!"
+          fi
 
       # 验证 sidecar 文件存在
       - name: Verify sidecar binaries

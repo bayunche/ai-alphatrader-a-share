@@ -102,11 +102,24 @@ jobs:
       - name: Build akshare service
         shell: bash
         run: |
-          ${{ matrix.python-cmd }} -m PyInstaller --onefile --name akshare_service server/akshare_service.py
+          # 使用 --collect-all 确保 akshare 及其所有依赖被完整打包
+          ${{ matrix.python-cmd }} -m PyInstaller \
+            --onefile \
+            --name akshare_service \
+            --collect-all akshare \
+            --hidden-import pandas \
+            --hidden-import numpy \
+            --hidden-import requests \
+            --hidden-import lxml \
+            --hidden-import bs4 \
+            --hidden-import html5lib \
+            --hidden-import urllib3 \
+            --hidden-import charset_normalizer \
+            server/akshare_service.py
           mv dist/akshare_service${{ matrix.exe-suffix }} src-tauri/bin/akshare_service-${{ matrix.rust-target }}${{ matrix.exe-suffix }}
           chmod +x src-tauri/bin/akshare_service-${{ matrix.rust-target }}${{ matrix.exe-suffix }} || true
-          echo "Akshare binary built:"
-          ls -la src-tauri/bin/
+          echo "=== Akshare binary built ==="
+          ls -lh src-tauri/bin/
 
       # 验证 sidecar 文件存在
       - name: Verify sidecar binaries
