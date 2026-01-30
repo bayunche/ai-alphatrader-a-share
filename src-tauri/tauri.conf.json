@@ -83,13 +83,11 @@
       "icon": [
         "icons/icon.ico"
       ],
-      "resources": [
-        "resources/server/index.js",
-        "resources/server/schema.sql",
-        "resources/server/node_modules/**/*",
-        "../assets/desktop_icon_rgba.png",
-        "../assets/tray_icon_rgba.png"
-      ]
+      "resources": {
+        "resources/server/index.js": "resources/server/",
+        "resources/server/schema.sql": "resources/server/",
+        "resources/server/node_modules": "resources/server/node_modules"
+      }
     },
     "systemTray": {
       "iconPath": "../assets/tray_icon_rgba.png",

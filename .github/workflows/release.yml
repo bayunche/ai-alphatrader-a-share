@@ -219,6 +219,12 @@ jobs:
           echo ""
           echo "=== externalBin config ==="
           cat src-tauri/tauri.conf.json | grep -A5 '"externalBin"'
+          echo ""
+          echo "=== resources config ==="
+          cat src-tauri/tauri.conf.json | grep -A10 '"resources"'
+          echo ""
+          echo "=== Full tauri.conf.json bundle section ==="
+          cat src-tauri/tauri.conf.json | grep -A20 '"bundle"'
 
       # 构建 Tauri 应用（启用 updater 签名）
       - name: Build Tauri

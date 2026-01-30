@@ -128,6 +128,16 @@ fn main() {
             let resource_path_str = resource_path.to_string_lossy().to_string();
             println!("Server script path: {}", resource_path_str);
 
+            // Resolve node_modules path for NODE_PATH
+            let node_modules_path = app.path_resolver()
+                .resolve_resource("resources/server/node_modules")
+                .expect("failed to resolve node_modules");
+            let node_modules_str = node_modules_path.to_string_lossy().to_string();
+            println!("NODE_PATH: {}", node_modules_str);
+            
+            // Add NODE_PATH to environment
+            envs.insert("NODE_PATH".to_string(), node_modules_str);
+
             // Spawn 'node' sidecar with script path as argument
             let server_cmd = match Command::new_sidecar("node") {
                 Ok(cmd) => cmd,
