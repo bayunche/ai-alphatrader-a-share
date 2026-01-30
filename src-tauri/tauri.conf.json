@@ -84,7 +84,9 @@
         "icons/icon.ico"
       ],
       "resources": [
-        "resources/**/*",
+        "resources/server/index.js",
+        "resources/server/schema.sql",
+        "resources/server/node_modules/**/*",
         "../assets/desktop_icon_rgba.png",
         "../assets/tray_icon_rgba.png"
       ]

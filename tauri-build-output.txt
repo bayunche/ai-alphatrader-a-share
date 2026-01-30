@@ -1,0 +1,198 @@
+﻿yarn run v1.22.22
+$ tauri build
+node.exe :      Running 
+beforeBuildCommand `yarn 
+build:server && yarn 
+build:akshare && yarn build`
+所在位置 
+C:\nvm4w\nodejs\yarn.ps1:16 
+字符: 5
++     & "$basedir/node$exe"  
+"$basedir/node_modules/yarn/b
+in/yarn.js" $ ...
++     ~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
+    + CategoryInfo           
+   : NotSpecified: (     Ru  
+  nning be... && yarn buil   
+ d`:String) [], RemoteExc    
+eption
+    + FullyQualifiedErrorId  
+   : NativeCommandError
+ 
+Active code page: 65001
+$ node scripts/bundle-server.cjs
+Building for target: x86_64-pc-windows-msvc
+Copying Node binary from C:\nvm4w\nodejs\node.exe to D:\code\ai-alphatrader-a-share\src-tauri\bin\node-x86_64-pc-windows-msvc.exe
+Bundling server code with esbuild...
+Copying resources...
+Copying sqlite3 from D:\code\ai-alphatrader-a-share\node_modules\sqlite3 to D:\code\ai-alphatrader-a-share\src-tauri\resources\server\node_modules\sqlite3
+Bundle complete.
+$ pyinstaller --onefile --name akshare_service server/akshare_service.py && node scripts/prepare-akshare.cjs
+273 INFO: PyInstaller: 
+6.17.0, contrib hooks: 
+2025.10
+273 INFO: Python: 3.13.5 
+(conda)
+290 INFO: Platform: 
+Windows-11-10.0.26100-SP0
+290 INFO: Python 
+environment: C:\Users\Adminis
+trator\Miniconda3
+291 INFO: wrote D:\code\ai-al
+phatrader-a-share\akshare_ser
+vice.spec
+294 INFO: Module search 
+paths (PYTHONPATH):
+['C:\\Users\\Administrator\\M
+iniconda3\\Scripts\\pyinstall
+er.exe',
+ 'C:\\Users\\Administrator\\M
+iniconda3\\python313.zip',
+ 'C:\\Users\\Administrator\\M
+iniconda3\\DLLs',
+ 'C:\\Users\\Administrator\\M
+iniconda3\\Lib',
+ 'C:\\Users\\Administrator\\M
+iniconda3',
+ 'C:\\Users\\Administrator\\M
+iniconda3\\Lib\\site-packages
+',
+ 'C:\\Users\\Administrator\\M
+iniconda3\\Lib\\site-packages
+\\win32',
+ 'C:\\Users\\Administrator\\M
+iniconda3\\Lib\\site-packages
+\\win32\\lib',
+ 'C:\\Users\\Administrator\\M
+iniconda3\\Lib\\site-packages
+\\Pythonwin',
+ 'D:\\code\\ai-alphatrader-a-
+share\\server']
+761 INFO: checking Analysis
+1018 INFO: checking PYZ
+1244 INFO: checking PKG
+1340 INFO: Bootloader C:\User
+s\Administrator\Miniconda3\Li
+b\site-packages\PyInstaller\b
+ootloader\Windows-64bit-intel
+\run.exe
+1340 INFO: checking EXE
+1428 INFO: Rebuilding 
+EXE-00.toc because 
+akshare_service.exe missing
+1428 INFO: Building EXE from 
+EXE-00.toc
+1428 INFO: Copying 
+bootloader EXE to D:\code\ai-
+alphatrader-a-share\dist\aksh
+are_service.exe
+1464 INFO: Copying icon to 
+EXE
+1497 INFO: Copying 0 
+resources to EXE
+1497 INFO: Embedding 
+manifest in EXE
+1529 INFO: Appending PKG 
+archive to EXE
+1687 INFO: Fixing EXE headers
+2740 INFO: Building EXE from 
+EXE-00.toc completed 
+successfully.
+2841 INFO: Build complete! 
+The results are available 
+in: D:\code\ai-alphatrader-a-
+share\dist
+Akshare sidecar moved to D:\code\ai-alphatrader-a-share\src-tauri\bin\akshare_service-x86_64-pc-windows-msvc.exe
+$ tsc && vite build
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[baseline-browser-mapping] 
+The data in this module is 
+over two months old.  To 
+ensure accurate Baseline 
+data, please update: `npm i b
+aseline-browser-mapping@lates
+t -D`
+[32m鉁?[39m 2297 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mindex.html                  [39m[1m[2m  1.15 kB[22m[1m[22m[2m 鈹?gzip:   0.56 kB[22m
+[2mdist/[22m[35massets/index-DdohRzwE.css   [39m[1m[2m 36.86 kB[22m[1m[22m[2m 鈹?gzip:   6.79 kB[22m
+[2mdist/[22m[36massets/process-CfLaaFa4.js  [39m[1m[2m  0.14 kB[22m[1m[22m[2m 鈹?gzip:   0.14 kB[22m
+[2mdist/[22m[36massets/updater-BAhST6PK.js  [39m[1m[2m  2.13 kB[22m[1m[22m[2m 鈹?gzip:   0.88 kB[22m
+[2mdist/[22m[36massets/index-Bclee8Z6.js    [39m[1m[33m709.89 kB[39m[22m[2m 鈹?gzip: 205.68 kB[22m
+[33m
+(!) Some chunks are larger 
+than 500 kB after 
+minification. Consider:
+- Using dynamic import() to 
+code-split the application
+- Use build.rollupOptions.out
+put.manualChunks to improve 
+chunking: https://rollupjs.or
+g/configuration-options/#outp
+ut-manualchunks
+- Adjust chunk size limit 
+for this warning via build.ch
+unkSizeWarningLimit.[39m
+[32m鉁?built in 3.61s[39m
+   Compiling ai_alpha_trader 
+v1.0.0 (D:\code\ai-alphatrade
+r-a-share\src-tauri)
+    Finished `release` 
+profile [optimized] 
+target(s) in 8.05s
+        Info Target: x64
+     Running candle for 
+"main.wxs"
+     Running light to 
+produce D:\code\ai-alphatrade
+r-a-share\src-tauri\target\re
+lease\bundle\msi\AI AlphaTrad
+er_1.0.1_x64_en-US.msi
+        Info Target: x64
+     Running makensis.exe to 
+produce D:\code\ai-alphatrade
+r-a-share\src-tauri\target\re
+lease\bundle\nsis\AI AlphaTra
+der_1.0.1_x64-setup.exe
+    Bundling D:\code\ai-alpha
+trader-a-share\src-tauri\targ
+et\release\bundle\msi\AI Alph
+aTrader_1.0.1_x64_en-US.msi.z
+ip
+    Bundling D:\code\ai-alpha
+trader-a-share\src-tauri\targ
+et\release\bundle\nsis\AI Alp
+haTrader_1.0.1_x64-setup.nsis
+.zip
+    Finished 2 bundles at:
+        D:\code\ai-alphatrade
+r-a-share\src-tauri\target\re
+lease\bundle\msi\AI AlphaTrad
+er_1.0.1_x64_en-US.msi
+        D:\code\ai-alphatrade
+r-a-share\src-tauri\target\re
+lease\bundle\nsis\AI AlphaTra
+der_1.0.1_x64-setup.exe
+        D:\code\ai-alphatrade
+r-a-share\src-tauri\target\re
+lease\bundle\msi\AI AlphaTrad
+er_1.0.1_x64_en-US.msi.zip 
+(updater)
+        D:\code\ai-alphatrade
+r-a-share\src-tauri\target\re
+lease\bundle\nsis\AI AlphaTra
+der_1.0.1_x64-setup.nsis.zip 
+(updater)
+
+       Error A public key 
+has been found, but no 
+private key. Make sure to 
+set `TAURI_PRIVATE_KEY` 
+environment variable.
+error Command failed with 
+exit code 1.
+info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.
