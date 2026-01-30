@@ -37,7 +37,7 @@ try {
     // However, the immediate error is "powershell". 
     // Let's just fix the command execution first.
 
-    execSync('npx pkg server/index.js --targets node18-win-x64 --output src-tauri/bin/server-x86_64-pc-windows-msvc.exe', { stdio: 'inherit' });
+    execSync('npx pkg server/index.js --targets node20-win-x64 --output src-tauri/bin/server-x86_64-pc-windows-msvc.exe', { stdio: 'inherit' });
     console.log('Server build complete.');
 } catch (e) {
     console.error('Server build failed:', e);

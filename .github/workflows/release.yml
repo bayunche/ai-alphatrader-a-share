@@ -73,7 +73,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
           cache: 'yarn'
 
       - name: Setup Python
@@ -123,11 +123,16 @@ jobs:
           sed -i.bak "s/^version = .*/version = \"$VERSION\"/" src-tauri/Cargo.toml
 
       # 构建 Node.js 服务
+      - name: Rebuild sqlite3 for Node 20
+        run: |
+          # 确保 sqlite3 原生模块与 pkg 目标 (Node 20) 的 ABI 匹配
+          npm rebuild sqlite3 --target=20.11.0 --target_arch=x64 --target_platform=win32 --build-from-source
+
       - name: Build Node server
         shell: bash
         run: |
           mkdir -p src-tauri/bin
-          npx pkg server/index.js --targets ${{ matrix.node-pkg-target }} --output src-tauri/bin/server-${{ matrix.rust-target }}${{ matrix.exe-suffix }}
+          npx pkg server/index.js --targets node20-win-x64 --output src-tauri/bin/server-${{ matrix.rust-target }}${{ matrix.exe-suffix }}
           echo "Server binary built:"
           ls -la src-tauri/bin/
 
