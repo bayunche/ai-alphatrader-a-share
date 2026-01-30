@@ -42,9 +42,12 @@
     "vitest": "^4.0.18"
   },
   "pkg": {
+    "scripts": [
+      "node_modules/sqlite3/lib/binding/**/*.js"
+    ],
     "assets": [
       "server/schema.sql",
-      "node_modules/**/*.node"
+      "node_modules/sqlite3/lib/binding/**/*.node"
     ]
   }
 }

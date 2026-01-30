@@ -128,7 +128,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p src-tauri/bin
-          npx pkg server/index.js --targets node18-win-x64 --output src-tauri/bin/server-${{ matrix.rust-target }}${{ matrix.exe-suffix }}
+          npx pkg server/index.js --targets ${{ matrix.node-pkg-target }} --output src-tauri/bin/server-${{ matrix.rust-target }}${{ matrix.exe-suffix }}
           echo "Server binary built:"
           ls -la src-tauri/bin/
 
