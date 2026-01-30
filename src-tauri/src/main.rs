@@ -90,7 +90,7 @@ fn main() {
             envs.insert("PORT".to_string(), "38211".to_string());
             envs.insert("AKSHARE_BASE".to_string(), "http://127.0.0.1:18118".to_string());
 
-            // 先启动 akshare sidecar，再启动后端，确保后端能连接 akshare
+            // 1. Akshare Sidecar (Non-Fatal Warning)
             let ak_started = match Command::new_sidecar("akshare_service") {
                 Ok(cmd) => {
                     match cmd
@@ -102,28 +102,45 @@ fn main() {
                             true
                         }
                         Err(e) => {
-                            eprintln!("failed to spawn akshare sidecar: {e}");
+                            let msg = format!("Failed to spawn akshare_service: {}\nSome data features may be unavailable.", e);
+                            tauri::api::dialog::blocking::message(None::<&tauri::Window>, "Warning: Helper Service Failed", &msg);
                             false
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("akshare sidecar setup failed: {e}");
+                    let msg = format!("Failed to find akshare_service binary: {}\nSome data features may be unavailable.", e);
+                    tauri::api::dialog::blocking::message(None::<&tauri::Window>, "Warning: Helper Service Missing", &msg);
                     false
                 }
             };
-
+            
             if !ak_started {
-                eprintln!("warning: akshare sidecar not running, backend may fallback to other sources");
+                println!("Akshare sidecar failed to start.");
             }
 
-            let (_rx, child) = Command::new_sidecar("server")
-                .map_err(|e| format!("failed to setup sidecar: {e}"))?
-                .envs(envs)
-                .spawn()
-                .map_err(|e| format!("failed to spawn sidecar: {e}"))?;
+            // 2. Server Sidecar (Fatal Error)
+            // Explicitly handle errors instead of using `?` to avoid silent crash/exit
+            let server_cmd = match Command::new_sidecar("server") {
+                Ok(cmd) => cmd,
+                Err(e) => {
+                    let msg = format!("CRITICAL: Failed to find server binary!\nError: {}\n\nPlease try reinstalling the application.", e);
+                    tauri::api::dialog::blocking::message(None::<&tauri::Window>, "Startup Failed", &msg);
+                    std::process::exit(1);
+                }
+            };
 
-            state.set_child(child);
+            match server_cmd.envs(envs).spawn() {
+                Ok((_rx, child)) => {
+                    state.set_child(child);
+                }
+                Err(e) => {
+                    let msg = format!("CRITICAL: Failed to launch backend server!\nError: {}\n\nCheck logs or contact support.", e);
+                    tauri::api::dialog::blocking::message(None::<&tauri::Window>, "Startup Failed", &msg);
+                    std::process::exit(1);
+                }
+            }
+
             Ok(())
         })
         .build(tauri::generate_context!())

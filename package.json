@@ -43,7 +43,8 @@
   },
   "pkg": {
     "assets": [
-      "server/schema.sql"
+      "server/schema.sql",
+      "node_modules/**/*.node"
     ]
   }
 }
