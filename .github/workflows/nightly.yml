@@ -20,24 +20,28 @@ jobs:
             rust-target: x86_64-pc-windows-msvc
             tauri-target: ''
             node-pkg-target: node18-win-x64
+            node-arch: 'x64'
             python-cmd: python
             exe-suffix: '.exe'
           - os: macos-latest
             rust-target: x86_64-apple-darwin
             tauri-target: x86_64-apple-darwin
             node-pkg-target: node18-macos-x64
+            node-arch: 'x64'
             python-cmd: python3
             exe-suffix: ''
           - os: macos-14
             rust-target: aarch64-apple-darwin
             tauri-target: aarch64-apple-darwin
             node-pkg-target: node18-macos-arm64
+            node-arch: 'arm64'
             python-cmd: python3
             exe-suffix: ''
           - os: ubuntu-22.04
             rust-target: x86_64-unknown-linux-gnu
             tauri-target: ''
             node-pkg-target: node18-linux-x64
+            node-arch: 'x64'
             python-cmd: python3
             exe-suffix: ''
 
@@ -51,6 +55,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
+          architecture: ${{ matrix.node-arch }}
           cache: 'yarn'
 
       - name: Setup Python
