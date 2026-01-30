@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:server": "node scripts/build-server.cjs",
+    "build:server": "node scripts/bundle-server.cjs",
     "build:akshare": "pyinstaller --onefile --name akshare_service server/akshare_service.py && node scripts/prepare-akshare.cjs",
     "build:desktop": "yarn build:server && yarn tauri build",
     "preview": "vite preview",
@@ -33,6 +33,7 @@
     "@types/react-dom": "^18.2.21",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.18",
+    "esbuild": "^0.27.2",
     "jsdom": "^27.4.0",
     "pkg": "^5.8.1",
     "postcss": "^8.4.35",

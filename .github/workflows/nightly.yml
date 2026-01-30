@@ -92,13 +92,7 @@ jobs:
 
 
       
-      - name: Build Node server
-        shell: bash
-        run: |
-          mkdir -p src-tauri/bin
-          npx pkg server/index.js --targets ${{ matrix.node-pkg-target }} --output src-tauri/bin/server-${{ matrix.rust-target }}${{ matrix.exe-suffix }}
-          echo "Server binary built:"
-          ls -la src-tauri/bin/
+      # Node Server 构建由 yarn build -> bundle-server.cjs 处理，无需显式调用 pkg
 
       # 构建 Python akshare 服务
       - name: Build akshare service
@@ -131,10 +125,17 @@ jobs:
           ls -la src-tauri/bin/
           echo ""
           echo "=== Checking required files ==="
-          if [ ! -f "src-tauri/bin/server-${{ matrix.rust-target }}${{ matrix.exe-suffix }}" ]; then
-            echo "ERROR: server sidecar not found!"
+          # Check for Node sidecar
+          if [ ! -f "src-tauri/bin/node-${{ matrix.rust-target }}${{ matrix.exe-suffix }}" ]; then
+            echo "ERROR: node sidecar not found!"
             exit 1
           fi
+          # Check for bundled server resources
+          if [ ! -f "src-tauri/resources/server/index.js" ]; then
+            echo "ERROR: Bundled server script not found!"
+            exit 1
+          fi
+          
           if [ ! -f "src-tauri/bin/akshare_service-${{ matrix.rust-target }}${{ matrix.exe-suffix }}" ]; then
             echo "ERROR: akshare_service sidecar not found!"
             exit 1

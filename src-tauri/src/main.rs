@@ -119,19 +119,29 @@ fn main() {
                 println!("Akshare sidecar failed to start.");
             }
 
-            // 2. Server Sidecar (Fatal Error)
-            // Explicitly handle errors instead of using `?` to avoid silent crash/exit
-            let server_cmd = match Command::new_sidecar("server") {
+            // 2. Server Sidecar (Node.js via Sidecar)
+            // Resolve resource path for server script
+            let resource_path = app.path_resolver()
+                .resolve_resource("resources/server/index.js")
+                .expect("failed to resolve resource");
+            
+            let resource_path_str = resource_path.to_string_lossy().to_string();
+            println!("Server script path: {}", resource_path_str);
+
+            // Spawn 'node' sidecar with script path as argument
+            let server_cmd = match Command::new_sidecar("node") {
                 Ok(cmd) => cmd,
                 Err(e) => {
-                    let msg = format!("CRITICAL: Failed to find server binary!\nError: {}\n\nPlease try reinstalling the application.", e);
+                    let msg = format!("CRITICAL: Failed to find node binary!\nError: {}\n\nPlease try reinstalling the application.", e);
                     tauri::api::dialog::blocking::message(None::<&tauri::Window>, "Startup Failed", &msg);
                     std::process::exit(1);
                 }
             };
-
-            match server_cmd.envs(envs).spawn() {
+            
+            // Pass the script path and environment variables to Node
+            match server_cmd.args(&[resource_path_str]).envs(envs).spawn() {
                 Ok((_rx, child)) => {
+                    println!("Node Server started successfully.");
                     state.set_child(child);
                 }
                 Err(e) => {

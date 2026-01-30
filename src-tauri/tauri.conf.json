@@ -77,8 +77,11 @@
       "targets": "all",
       "identifier": "com.alpha-trader.app",
       "externalBin": [
-        "bin/server",
+        "bin/node",
         "bin/akshare_service"
+      ],
+      "resources": [
+        "resources/**/*"
       ],
       "icon": [
         "icons/icon.ico"
