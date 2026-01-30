@@ -93,7 +93,7 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install Node dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile --ignore-engines
 
       - name: Install Python dependencies
         run: |
@@ -123,16 +123,16 @@ jobs:
           sed -i.bak "s/^version = .*/version = \"$VERSION\"/" src-tauri/Cargo.toml
 
       # 构建 Node.js 服务
-      - name: Rebuild sqlite3 for Node 20
+      - name: Rebuild sqlite3 for Node 18
         run: |
-          # 确保 sqlite3 原生模块与 pkg 目标 (Node 20) 的 ABI 匹配
-          npm rebuild sqlite3 --target=20.11.0 --target_arch=x64 --target_platform=win32 --build-from-source
+          # pkg 默认包含 Node 18.5.0，强制为该版本构建原生绑定
+          npm rebuild sqlite3 --target=18.5.0 --target_arch=x64 --target_platform=win32 --build-from-source
 
       - name: Build Node server
         shell: bash
         run: |
           mkdir -p src-tauri/bin
-          npx pkg server/index.js --targets node20-win-x64 --output src-tauri/bin/server-${{ matrix.rust-target }}${{ matrix.exe-suffix }}
+          npx pkg server/index.js --targets node18-win-x64 --output src-tauri/bin/server-${{ matrix.rust-target }}${{ matrix.exe-suffix }}
           echo "Server binary built:"
           ls -la src-tauri/bin/
 
