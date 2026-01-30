@@ -15,7 +15,18 @@
       "all": false,
       "shell": {
         "all": false,
-        "open": true
+        "open": true,
+        "sidecar": true,
+        "scope": [
+          {
+            "name": "bin/server",
+            "sidecar": true
+          },
+          {
+            "name": "bin/akshare_service",
+            "sidecar": true
+          }
+        ]
       },
       "http": {
         "all": true,
