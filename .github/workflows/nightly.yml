@@ -21,21 +21,25 @@ jobs:
             tauri-target: ''
             node-pkg-target: node18-win-x64
             python-cmd: python
+            exe-suffix: '.exe'
           - os: macos-latest
             rust-target: x86_64-apple-darwin
             tauri-target: x86_64-apple-darwin
             node-pkg-target: node18-macos-x64
             python-cmd: python3
+            exe-suffix: ''
           - os: macos-14
             rust-target: aarch64-apple-darwin
             tauri-target: aarch64-apple-darwin
             node-pkg-target: node18-macos-arm64
             python-cmd: python3
+            exe-suffix: ''
           - os: ubuntu-22.04
             rust-target: x86_64-unknown-linux-gnu
             tauri-target: ''
             node-pkg-target: node18-linux-x64
             python-cmd: python3
+            exe-suffix: ''
 
     runs-on: ${{ matrix.os }}
     
@@ -73,25 +77,54 @@ jobs:
           ${{ matrix.python-cmd }} -m pip install --upgrade pip
           ${{ matrix.python-cmd }} -m pip install pyinstaller akshare
 
+      # 修改 beforeBuildCommand，CI 中只构建前端，sidecar 手动构建
+      - name: Prepare Tauri config for CI
+        shell: bash
+        run: |
+          node -e "
+            const fs=require('fs');
+            const p=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json'));
+            // CI 中只需要构建前端，sidecar 已经在前面的步骤中构建
+            p.build.beforeBuildCommand='yarn build';
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(p, null, 2));
+          "
+
       # 构建 Node.js 服务
       - name: Build Node server
         shell: bash
         run: |
-          npx pkg server/index.js --targets ${{ matrix.node-pkg-target }} --output src-tauri/bin/server-${{ matrix.rust-target }}${{ runner.os == 'Windows' && '.exe' || '' }}
+          mkdir -p src-tauri/bin
+          npx pkg server/index.js --targets ${{ matrix.node-pkg-target }} --output src-tauri/bin/server-${{ matrix.rust-target }}${{ matrix.exe-suffix }}
+          echo "Server binary built:"
+          ls -la src-tauri/bin/
 
       # 构建 Python akshare 服务
       - name: Build akshare service
         shell: bash
         run: |
           ${{ matrix.python-cmd }} -m PyInstaller --onefile --name akshare_service server/akshare_service.py
-          # 移动到 bin 目录
-          mkdir -p src-tauri/bin
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            mv dist/akshare_service.exe src-tauri/bin/akshare_service-${{ matrix.rust-target }}.exe
-          else
-            mv dist/akshare_service src-tauri/bin/akshare_service-${{ matrix.rust-target }}
-            chmod +x src-tauri/bin/akshare_service-${{ matrix.rust-target }}
+          mv dist/akshare_service${{ matrix.exe-suffix }} src-tauri/bin/akshare_service-${{ matrix.rust-target }}${{ matrix.exe-suffix }}
+          chmod +x src-tauri/bin/akshare_service-${{ matrix.rust-target }}${{ matrix.exe-suffix }} || true
+          echo "Akshare binary built:"
+          ls -la src-tauri/bin/
+
+      # 验证 sidecar 文件存在
+      - name: Verify sidecar binaries
+        shell: bash
+        run: |
+          echo "=== Sidecar binaries in src-tauri/bin/ ==="
+          ls -la src-tauri/bin/
+          echo ""
+          echo "=== Checking required files ==="
+          if [ ! -f "src-tauri/bin/server-${{ matrix.rust-target }}${{ matrix.exe-suffix }}" ]; then
+            echo "ERROR: server sidecar not found!"
+            exit 1
           fi
+          if [ ! -f "src-tauri/bin/akshare_service-${{ matrix.rust-target }}${{ matrix.exe-suffix }}" ]; then
+            echo "ERROR: akshare_service sidecar not found!"
+            exit 1
+          fi
+          echo "All sidecar binaries verified successfully!"
 
       # 构建前端
       - name: Build frontend

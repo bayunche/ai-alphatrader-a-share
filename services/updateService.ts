@@ -4,7 +4,10 @@
 
 const GITHUB_REPO = 'bayunche/ai-alphatrader-a-share';
 const GITHUB_API_BASE = 'https://api.github.com';
-const CURRENT_VERSION = '1.0.1';
+const FALLBACK_VERSION = '1.0.0';
+
+// 缓存版本号，避免重复异步调用
+let cachedVersion: string | null = null;
 
 /** Release 信息结构 */
 export interface ReleaseInfo {
@@ -56,10 +59,30 @@ function compareVersions(v1: string, v2: string): number {
 }
 
 /**
- * 获取当前应用版本号
+ * 获取当前应用版本号（异步，优先从 Tauri API 获取）
+ */
+export async function getVersionAsync(): Promise<string> {
+    if (cachedVersion) return cachedVersion;
+
+    if (isTauriEnv()) {
+        try {
+            const { getVersion } = await import('@tauri-apps/api/app');
+            cachedVersion = await getVersion();
+            return cachedVersion;
+        } catch (e) {
+            console.warn('Failed to get version from Tauri API:', e);
+        }
+    }
+
+    cachedVersion = FALLBACK_VERSION;
+    return cachedVersion;
+}
+
+/**
+ * 获取当前应用版本号（同步，返回缓存值或回退值）
  */
 export function getCurrentVersion(): string {
-    return CURRENT_VERSION;
+    return cachedVersion || FALLBACK_VERSION;
 }
 
 /**
@@ -115,7 +138,7 @@ export async function installTauriUpdate(
  * 检查 GitHub 是否有新版本（Web 回退方案）
  */
 export async function checkForUpdate(currentVersion?: string): Promise<UpdateCheckResult> {
-    const version = currentVersion || getCurrentVersion();
+    const version = currentVersion || await getVersionAsync();
 
     try {
         const response = await fetch(
