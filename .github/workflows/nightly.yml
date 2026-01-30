@@ -77,15 +77,15 @@ jobs:
           ${{ matrix.python-cmd }} -m pip install --upgrade pip
           ${{ matrix.python-cmd }} -m pip install pyinstaller akshare
 
-      # 修改 beforeBuildCommand，CI 中只构建前端，sidecar 手动构建
+      # 修改 beforeBuildCommand，CI 中所有构建已完成，禁用 beforeBuildCommand
       - name: Prepare Tauri config for CI
         shell: bash
         run: |
           node -e "
             const fs=require('fs');
             const p=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json'));
-            // CI 中只需要构建前端，sidecar 已经在前面的步骤中构建
-            p.build.beforeBuildCommand='yarn build';
+            // CI 中所有构建都已在前面步骤完成，禁用 beforeBuildCommand
+            p.build.beforeBuildCommand='echo CI build - skipping beforeBuildCommand';
             fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(p, null, 2));
           "
 

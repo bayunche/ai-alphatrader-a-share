@@ -114,8 +114,8 @@ jobs:
             const fs=require('fs');
             const p=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json'));
             p.package.version='$VERSION';
-            // CI 中只需要构建前端，sidecar 已经在前面的步骤中构建
-            p.build.beforeBuildCommand='yarn build';
+            // CI 中所有构建都已在前面步骤完成，禁用 beforeBuildCommand
+            p.build.beforeBuildCommand='echo CI build - skipping beforeBuildCommand';
             fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(p, null, 2));
           "
           # 更新 Cargo.toml
@@ -162,6 +162,19 @@ jobs:
       - name: Build frontend
         run: yarn build
 
+      # 调试：验证 sidecar 和配置
+      - name: Debug - Verify sidecar and config before Tauri build
+        shell: bash
+        run: |
+          echo "=== tauri.conf.json beforeBuildCommand ==="
+          cat src-tauri/tauri.conf.json | grep -A2 '"build"'
+          echo ""
+          echo "=== Sidecar file sizes ==="
+          ls -lh src-tauri/bin/
+          echo ""
+          echo "=== externalBin config ==="
+          cat src-tauri/tauri.conf.json | grep -A5 '"externalBin"'
+
       # 构建 Tauri 应用（启用 updater 签名）
       - name: Build Tauri
         uses: tauri-apps/tauri-action@v0
@@ -178,6 +191,16 @@ jobs:
           includeUpdaterJson: true
           updaterJsonKeepUniversal: true
           args: ${{ matrix.tauri-target && format('--target {0}', matrix.tauri-target) || '' }}
+
+      # 调试：验证构建产物大小
+      - name: Debug - Verify build artifacts size
+        shell: bash
+        run: |
+          echo "=== Build artifacts ==="
+          find src-tauri/target -name "*.exe" -o -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" 2>/dev/null | head -20 | xargs ls -lh 2>/dev/null || true
+          echo ""
+          echo "=== Bundle directory ==="
+          ls -lhR src-tauri/target/release/bundle/ 2>/dev/null || ls -lhR src-tauri/target/*/release/bundle/ 2>/dev/null || echo "Bundle not found"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
