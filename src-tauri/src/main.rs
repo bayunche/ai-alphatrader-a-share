@@ -122,7 +122,7 @@ fn main() {
             // 2. Server Sidecar (Node.js via Sidecar)
             // Resolve resource path for server script
             let resource_path = app.path_resolver()
-                .resolve_resource("resources/server/index.js")
+                .resolve_resource("resources/server/index.cjs")
                 .expect("failed to resolve resource");
             
             let resource_path_str = resource_path.to_string_lossy().to_string();

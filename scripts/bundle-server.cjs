@@ -41,7 +41,7 @@ if (platform !== 'win32') fs.chmodSync(targetNodePath, '755');
 console.log('Bundling server code with esbuild...');
 esbuild.buildSync({
     entryPoints: ['server/index.js'],
-    outfile: path.join(resourcesDir, 'index.js'),
+    outfile: path.join(resourcesDir, 'index.cjs'),
     bundle: true,
     platform: 'node',
     target: 'node18',
@@ -77,17 +77,27 @@ function copyDir(src, dest) {
 }
 
 // We only need lib/binding (native mod), package.json, and lib/*.js (wrapper)
-// But to be safe and simple, let's copy the whole package properly,
-// OR since we are bundling, we might just need the native parts if we were careful.
-// However, 'sqlite3' main entry point might load other files. 
-// Safest is to copy the whole 'sqlite3' folder from node_modules.
+// But to be safe and simple, let's copy the whole package properly.
 console.log(`Copying sqlite3 from ${sourceSqlite} to ${targetSqlite}`);
 copyDir(sourceSqlite, targetSqlite);
 
-// Also copy 'bindings' package if it's used by sqlite3 (it usually is)
-// But wait, esbuild 'external: ["sqlite3"]' means `require('sqlite3')` stays as is.
-// So we need `node_modules/sqlite3` to be present relative to the bundle.
-// The bundle is at `resources/server/index.js`.
-// So `resources/server/node_modules/sqlite3` is correct.
+// 5. Copy 'bindings' (Critical dependency for sqlite3)
+// sqlite3 depends on 'bindings', but it is often hoisted to root node_modules.
+// We must copy it explicitly because we are only copying 'sqlite3' folder above.
+const bindingSrcPath = path.resolve(__dirname, '../node_modules/bindings');
+const bindingDestPath = path.join(resourcesDir, 'node_modules/bindings');
+
+if (fs.existsSync(bindingSrcPath)) {
+    console.log(`Copying bindings from ${bindingSrcPath} to ${bindingDestPath}`);
+    copyDir(bindingSrcPath, bindingDestPath);
+} else {
+    // If not at root, maybe it's nested?
+    const nestedBindingsPath = path.join(sourceSqlite, 'node_modules/bindings');
+    if (!fs.existsSync(nestedBindingsPath)) {
+        console.warn('WARNING: Could not find "bindings" package! sqlite3 might fail.');
+    } else {
+        console.log(`Found nested bindings at ${nestedBindingsPath} - strictly expected at root for flattened bundle.`);
+    }
+}
 
 console.log('Bundle complete.');

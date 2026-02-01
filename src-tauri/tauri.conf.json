@@ -84,7 +84,7 @@
         "icons/icon.ico"
       ],
       "resources": {
-        "resources/server/index.js": "resources/server/",
+        "resources/server/index.cjs": "resources/server/",
         "resources/server/schema.sql": "resources/server/",
         "resources/server/node_modules": "resources/server/node_modules"
       }

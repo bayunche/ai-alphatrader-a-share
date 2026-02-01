@@ -23999,6 +23999,23 @@ var path = require("path");
 var AKSHARE_BASE = process.env.AKSHARE_BASE || "http://127.0.0.1:5001";
 var app = express();
 var PORT = process.env.PORT || 38211;
+var debugLog = (msg) => {
+  try {
+    const logPath = path.join(process.env.DATA_DIR || path.join(process.env.APPDATA || ".", "ai-alpha-trader", "data"), "server_debug.log");
+    const dir = path.dirname(logPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(logPath, `[${(/* @__PURE__ */ new Date()).toISOString()}] ${msg}
+`);
+  } catch (e) {
+  }
+};
+debugLog("Server starting...");
+debugLog(`ENV: PORT=${process.env.PORT}, DATA_DIR=${process.env.DATA_DIR}, NODE_PATH=${process.env.NODE_PATH}`);
+process.on("uncaughtException", (err) => {
+  debugLog(`Uncaught Exception: ${err.message}
+${err.stack}`);
+  process.exit(1);
+});
 var isPkg = !!process.pkg;
 var appRoot = isPkg ? path.dirname(process.execPath) : __dirname;
 var dataDir = process.env.DATA_DIR;

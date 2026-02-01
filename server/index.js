@@ -12,6 +12,27 @@ const AKSHARE_BASE = process.env.AKSHARE_BASE || 'http://127.0.0.1:5001';
 const app = express();
 const PORT = process.env.PORT || 38211;
 
+// --- DEBUG LOGGING ---
+const debugLog = (msg) => {
+  try {
+    const logPath = path.join(process.env.DATA_DIR || path.join(process.env.APPDATA || '.', 'ai-alpha-trader', 'data'), 'server_debug.log');
+    // Ensure dir exists
+    const dir = path.dirname(logPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`);
+  } catch (e) {
+    // ignore
+  }
+};
+debugLog('Server starting...');
+debugLog(`ENV: PORT=${process.env.PORT}, DATA_DIR=${process.env.DATA_DIR}, NODE_PATH=${process.env.NODE_PATH}`);
+
+process.on('uncaughtException', (err) => {
+  debugLog(`Uncaught Exception: ${err.message}\n${err.stack}`);
+  process.exit(1);
+});
+// ---------------------
+
 const isPkg = !!process.pkg;
 const appRoot = isPkg ? path.dirname(process.execPath) : __dirname;
 
