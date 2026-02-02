@@ -39,15 +39,21 @@ if (platform !== 'win32') fs.chmodSync(targetNodePath, '755');
 
 // 3. Bundle Server Code
 console.log('Bundling server code with esbuild...');
+const serverBundlePath = path.join(resourcesDir, 'index.cjs');
 esbuild.buildSync({
     entryPoints: ['server/index.js'],
-    outfile: path.join(resourcesDir, 'index.cjs'),
+    outfile: serverBundlePath,
     bundle: true,
     platform: 'node',
     target: 'node18',
     external: ['sqlite3', 'bindings'], // Keep sqlite3 external
     format: 'cjs',
 });
+if (!fs.existsSync(serverBundlePath)) {
+    throw new Error(`Server bundle missing after build: ${serverBundlePath}`);
+}
+const legacyBundlePath = path.join(resourcesDir, 'index.js');
+fs.copyFileSync(serverBundlePath, legacyBundlePath);
 
 // 4. Copy Resources (sqlite3 + schema)
 console.log('Copying resources...');

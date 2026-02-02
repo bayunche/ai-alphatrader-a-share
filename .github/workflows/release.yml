@@ -110,6 +110,10 @@ jobs:
       - name: Update version
         shell: bash
         run: |
+          if [ -z "${TAURI_PRIVATE_KEY}" ]; then
+            echo "ERROR: TAURI_PRIVATE_KEY is not set. Release builds require signing."
+            exit 1
+          fi
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"  # 移除 v 前缀
           echo "Building version: $VERSION"
@@ -174,13 +178,24 @@ jobs:
             exit 1
           fi
           # Check for bundled server resources
-          if [ ! -f "src-tauri/resources/server/index.js" ]; then
-            echo "ERROR: Bundled server script not found!"
-            exit 1
+          if [ ! -f "src-tauri/resources/server/index.cjs" ]; then
+            if [ -f "src-tauri/resources/server/index.js" ]; then
+              echo "WARNING: index.cjs missing but index.js present; renaming for Tauri."
+              mv "src-tauri/resources/server/index.js" "src-tauri/resources/server/index.cjs"
+            else
+              echo "ERROR: Bundled server script not found!"
+              ls -la src-tauri/resources/server || true
+              exit 1
+            fi
           fi
           # Check for sqlite3 native module
           if [ ! -d "src-tauri/resources/server/node_modules/sqlite3" ]; then
             echo "ERROR: sqlite3 module not found!"
+            exit 1
+          fi
+          # Check for bindings module
+          if [ ! -d "src-tauri/resources/server/node_modules/bindings" ]; then
+            echo "ERROR: bindings module not found!"
             exit 1
           fi
           # Check for schema.sql
